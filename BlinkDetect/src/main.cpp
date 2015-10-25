@@ -34,7 +34,7 @@ static CvMemStorage* storage = 0;
 static CvHaarClassifierCascade* cascade = 0;
 
 // Function prototypes
-void detect_and_draw();
+void detect_and_draw(); 
 void CopySubImage(IplImage *imageSource, IplImage *imageDest, int xorigin, int yorigin, int width, int height);
 
 // Create a string that contains the cascade name
