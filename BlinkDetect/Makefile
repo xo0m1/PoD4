@@ -4,7 +4,7 @@
 CC = g++
 CFLAGS = -c `pkg-config --cflags opencv` -Wall
 OCVLIBS = `pkg-config --libs opencv`
-LDFLAGS = -lraspicam -lraspicam_cv -lmmal -lmmal_core -lmmal_util
+LDFLAGS = -lraspicam -lraspicam_cv -lmmal -lmmal_core -lmmal_util -lrt
 LDPATH = -L/opt/vc/lib -L/usr/local/lib
 SOURCES = src/main.cpp src/blink_detection.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
@@ -20,7 +20,7 @@ all : $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(LDPATH) $(OCVLIBS) $(LDFLAGS) $(OBJECTS) -o $@
-	echo "Done"
+	@echo "Done"
 	
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@

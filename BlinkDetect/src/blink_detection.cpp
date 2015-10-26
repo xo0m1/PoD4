@@ -16,6 +16,7 @@
 #include <math.h>
 #include <float.h>
 #include <limits.h>
+#include <unistd.h>
 #include <time.h>
 #include <ctype.h>
 
@@ -39,14 +40,13 @@ static CvHaarClassifierCascade* cascade = 0;
 
 static void detect_and_draw(); 
 static void CopySubImage(IplImage *imageSource, IplImage *imageDest, int xorigin, int yorigin, int width, int height);
+static double getTick();
 
 // Create a string that contains the cascade name
 //const char* CASCADE_FILE = "Cascade Files/haarcascade_frontalface_alt.xml";
 const char* CASCADE_FILE  = "/home/pi/openCV_others/haarcascade_mcs_eyepair_big.xml";
 
-//DWORD tickCountPrev = 0;
-static int frames = 0;
-static float fps = 0;
+
 
 // Images to capture the frame from video or camera or from file
 static IplImage        *frame, 
@@ -63,17 +63,26 @@ using namespace std;
 // Main function, defines the entry point for the program.
 int blink_detection( void )
 {
+	double tickCountPrev = 0;
+	double tickCount = 0;
+	int frames = 0;
+	float fps = 0;
+
     // Structure for getting video from camera or avi
-    CvCapture* capture = 0;
+    //CvCapture* capture = 0;
+    
+    //cv::CascadeClassifier cascade;
 
     // Load the HaarClassifierCascade
+    //cascade.load(CASCADE_FILE);
     cascade = (CvHaarClassifierCascade*)cvLoad( CASCADE_FILE, 0, 0, 0 );
     cout<<"cascade file: "<< CASCADE_FILE<< endl;
     
     // Check whether the cascade has loaded successfully. Else report and error and quit
+    //if( cascade.empty() )    
     if( !cascade )
     {
-        fprintf( stderr, "ERROR: Could not load classifier cascade\n" );
+        cerr << "ERROR: Could not load classifier cascade" << endl;
         return -1;
     }
     
@@ -98,22 +107,25 @@ int blink_detection( void )
 	}
 	Camera.set(CV_CAP_PROP_EXPOSURE, raspicam::RASPICAM_EXPOSURE_NIGHTPREVIEW); //-1 is auto, values range from 0 to 100  
 
+
+
 	// Create a new named window with title: result
 	cvNamedWindow( "result", 1 );
 	//cvNamedWindow( "eyes", 1);
 	//cvNamedWindow( "eyes_diff", 1);
+	
 	cvNamedWindow("eyes_gray", 1);
-	cvNamedWindow("eyes_smooth", 1);
-	cvNamedWindow( "eyes_bin", 1);
+	//cvNamedWindow("eyes_smooth", 1);
+	//cvNamedWindow( "eyes_bin", 1);
 
     // Find if the capture is loaded successfully or not.
 
     // If loaded succesfully, then:
-    if( 1 )
+    if( 1 ) 
     //if( capture )
     {
         // Capture from the camera.
-        for(;;)
+        while(1)
         {
 			
 			Camera.grab();
@@ -129,10 +141,6 @@ int blink_detection( void )
 			cv::resize(image_cam, frame_mat, size); 
 			
 			// Copy to iimage structure			
-			//frame = cvCreateImage(cvSize(frame_mat.cols,frame_mat.rows),8,3);
-			//IplImage ipltemp=frame_mat;			
-			//cvCopy(&ipltemp,frame);
-			
 			IplImage copy = frame_mat;
 			frame = &copy;
 		
@@ -150,59 +158,62 @@ int blink_detection( void )
             if( !frame_copy )
             {
                 frame_copy = cvCreateImage( cvSize(frame->width,frame->height), IPL_DEPTH_8U, frame->nChannels );
-                                frame_eyes = cvCreateImage( cvSize(frame->width,frame->height), IPL_DEPTH_8U, frame->nChannels );
-                                frame_eyes_prev = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, frame->nChannels );
-                                frame_eyes_diff = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, frame->nChannels );
-                                frame_eyes_gray = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
-                                frame_eyes_smooth = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
-                                frame_eyes_bin = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
+				frame_eyes = cvCreateImage( cvSize(frame->width,frame->height), IPL_DEPTH_8U, frame->nChannels );
+				frame_eyes_prev = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, frame->nChannels );
+				frame_eyes_diff = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, frame->nChannels );
+				frame_eyes_gray = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
+				frame_eyes_smooth = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
+				frame_eyes_bin = cvCreateImage( cvSize(frame->width, frame->height), IPL_DEPTH_8U, 1 );
             }
 
             // Check the origin of image. If top left, copy the image frame to frame_copy. 
             if( frame->origin == IPL_ORIGIN_TL )
+            {
                 cvCopy( frame, frame_copy, 0 );
+			}
             // Else flip and copy the image
             else
+            {
                 cvFlip( frame, frame_copy, 0 );
+			}
             
             // Call the function to detect and draw the face
             detect_and_draw();
 
 			frames++;
-			/*
-			DWORD tickCount = GetTickCount();
+			
+			//tickCount = GetTickCount();
+			tickCount = getTick();
 			if (tickCount > tickCountPrev + 1000) 
 			{
 					fps = frames * 1000.0f / (tickCount - tickCountPrev);
 					frames = 0;
 					tickCountPrev = tickCount;      
 			}
-			* */
+			
 
-			char strFPS[50];
-			//char strINT[50];
+			char strFPS[50];			
 
-			sprintf(strFPS, "FPS: %f", fps);
-			//sprintf_s(strINT, "INT: %f", imgDifference.val[0]);
+			sprintf(strFPS, "FPS: %f", fps);			
 
 			CvFont font;
-			cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 0.75, 0.75, 0, 2, CV_AA);
+			cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 0.50, 0.50, 0, 2, CV_AA);
 
 			CvSize textSize;
 			cvGetTextSize("A", &font, &textSize, 0);
 
 			cvPutText(frame_copy, strFPS, cvPoint(0, 1 * textSize.height), &font, CV_RGB(0, 0, 255));
-			//cvPutText(frame_copy, strINT, cvPoint(0, 2 * textSize.height), &font, CV_RGB(0, 0, 255));
 
 			// Show the image in the window named "result"
 			cvShowImage( "result", frame_copy );
 			//cvShowImage( "eyes", frame_eyes );
 			//cvShowImage( "eyes_diff", frame_eyes_diff );
-			cvShowImage( "eyes_gray", frame_eyes_gray );
-			cvShowImage( "eyes_smooth", frame_eyes_smooth );
-			cvShowImage( "eyes_bin", frame_eyes_bin );
 			
-			//cerr << "here" << endl;
+			cvShowImage( "eyes_gray", frame_eyes_gray );
+			//cvShowImage( "eyes_smooth", frame_eyes_smooth );
+			//cvShowImage( "eyes_bin", frame_eyes_bin );
+			
+			
 
             // Wait for a while before proceeding to the next frame
             //if( cvWaitKey( 10 ) >= 0 )
@@ -214,20 +225,20 @@ int blink_detection( void )
 
         // Release the images, and capture memory
         cvReleaseImage( &frame_copy );
-                cvReleaseImage( &frame_eyes );
-                cvReleaseImage( &frame_eyes_prev );
-                cvReleaseImage( &frame_eyes_diff );
-                cvReleaseImage( &frame_eyes_bin );
-        cvReleaseCapture( &capture );
+		cvReleaseImage( &frame_eyes );
+		cvReleaseImage( &frame_eyes_prev );
+		cvReleaseImage( &frame_eyes_diff );
+		cvReleaseImage( &frame_eyes_bin );
+        //cvReleaseCapture( &capture );
     }
     
     // Destroy the window previously created with filename: "result"
     cvDestroyWindow("result");
-        //cvDestroyWindow("eyes");
-        //cvDestroyWindow("eyes_diff");
-        cvDestroyWindow("eyes_gray");
-        cvDestroyWindow("eyes_smooth");
-        cvDestroyWindow("eyes_bin");
+	//cvDestroyWindow("eyes");
+	//cvDestroyWindow("eyes_diff");
+	cvDestroyWindow("eyes_gray");
+	cvDestroyWindow("eyes_smooth");
+	cvDestroyWindow("eyes_bin");
 
     // return 0 to indicate successfull execution of the program
     return 0;
@@ -237,14 +248,9 @@ int blink_detection( void )
 void detect_and_draw()
 {
     int scale = 1;
-
-    // Create a new image based on the input image
-    //IplImage* temp = cvCreateImage( cvSize(img->width/scale,img->height/scale), 8, 3 );
-
+    
     // Create two points to represent the face locations
-    CvPoint pt1, pt2;
-    //int i;
-	double avgIntensityValue = 0.0f;
+    CvPoint pt1, pt2;    	
 	CvScalar imgDifference;
 	imgDifference.val[0] = 0;
 
@@ -252,7 +258,8 @@ void detect_and_draw()
     cvClearMemStorage( storage );
 
     // Find whether the cascade is loaded, to find the faces. If yes, then:
-    if( cascade )
+    if( 1 )
+    //if( cascade )
     {
 
         // There can be more than one face in an image. So create a growable sequence of faces.
@@ -262,7 +269,6 @@ void detect_and_draw()
                                             cvSize(50, 50) );
 
         // Loop the number of faces found.
-        //for( i = 0; i < (faces ? faces->total : 0); i++ )
         if((faces ? faces->total : 0) > 0)
         {
            // Create a new rectangle for drawing the face
@@ -291,10 +297,10 @@ void detect_and_draw()
             // Draw the rectangle in the input image
             cvRectangle( frame_copy, pt1, pt2, CV_RGB(255,0,0), 3, 8, 0 );
                         
-                        /*cvSetImageROI(img, *r);
-                        avgIntensity = cvAvg(img);
-                        avgIntensityValue = avgIntensity.val[0] * 0.3 + avgIntensity.val[1] * 0.59 + avgIntensity.val[2] * 0.11;
-                        cvResetImageROI(img);*/
+			/*cvSetImageROI(img, *r);
+			avgIntensity = cvAvg(img);
+			avgIntensityValue = avgIntensity.val[0] * 0.3 + avgIntensity.val[1] * 0.59 + avgIntensity.val[2] * 0.11;
+			cvResetImageROI(img);*/
         }
     }
 }
@@ -318,3 +324,14 @@ void CopySubImage(IplImage *imageSource, IplImage *imageDest, int xorigin, int y
         cvResetImageROI(imageSource);
         cvResetImageROI(imageDest);
 }
+
+double getTick(void) 
+{
+    struct timespec ts;
+    unsigned theTick = 0U;
+    clock_gettime( CLOCK_MONOTONIC, &ts );
+    theTick  = ts.tv_nsec / 1000000;
+    theTick += ts.tv_sec * 1000;
+    return (double)theTick;
+}
+
