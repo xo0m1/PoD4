@@ -284,7 +284,7 @@ void detect_and_draw()
 			//cvCvtColor(frame_eyes_diff, frame_eyes_gray, CV_RGB2GRAY);
 			//cvSmooth(frame_eyes_gray, frame_eyes_smooth);			
 			cvSmooth(frame_eyes_diff, frame_eyes_smooth);
-			cvThreshold(frame_eyes_smooth, frame_eyes_bin, 64, 255, CV_THRESH_BINARY);
+			cvThreshold(frame_eyes_smooth, frame_eyes_bin, 60, 255, CV_THRESH_BINARY);
 
             //imgDifference = cvSum(frame_eyes_diff);
 

@@ -46,8 +46,8 @@ int main()
 	// Load the cascade classifiers
 	// Make sure you point the XML files to the right path, or 
 	// just copy the files from [OPENCV_DIR]/data/haarcascades directory
-	face_cascade.load("haarcascade_frontalface_alt2.xml");
-	eye_cascade.load("haarcascade_eye.xml");
+	face_cascade.load("xml/haarcascade_frontalface_alt2.xml");
+	eye_cascade.load("xml/haarcascade_eye.xml");
 	
 	
 	
@@ -75,7 +75,7 @@ int main()
     // native resulution is 1280 X 900
     //Camera.set(CV_CAP_PROP_BRIGHTNESS, 50); // values range from 0 to 100
     //Camera.set(CV_CAP_PROP_GAIN, -1); // values range from 0 to 100
-    Camera.set(CV_CAP_PROP_EXPOSURE, raspicam::RASPICAM_EXPOSURE_NIGHTPREVIEW); //-1 is auto, values range from 0 to 100
+    //Camera.set(CV_CAP_PROP_EXPOSURE, raspicam::RASPICAM_EXPOSURE_NIGHTPREVIEW); //-1 is auto, values range from 0 to 100
     //Camera.set(CV_CAP_PROP_WHITE_BALANCE_RED_V, 50); //values range from 0 to 100, -1 auto whitebalance
     //Camera.set(CV_CAP_PROP_WHITE_BALANCE_BLUE_U, 50); //values range from 0 to 100,  -1 auto whitebalance
 
@@ -118,7 +118,7 @@ int main()
 		if (eye_bb.width != 0 || eye_bb.height != 0)
 		{					
 			// Tracking stage with template matching
-			trackEye(gray, eye_tpl, eye_bb);
+			//trackEye(gray, eye_tpl, eye_bb);
 
 			// Draw bounding rectangle for the eye
 			cv::rectangle(gray, eye_bb, CV_RGB(0,255,0));
@@ -126,16 +126,18 @@ int main()
 			counter++;
 		}
 		
+		
 		if (counter == 5)
 		{
 			eye_bb.width = 0;
 			eye_bb.height = 0;
 			counter = 0;
-		}
-		
+		}		
 
 		// Display video
-		cv::imshow("video", gray);
+		cv::imshow("video", gray);	
+		
+		
 	}
 
 	return 0;
@@ -163,8 +165,9 @@ int detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 		if (eyes.size())
 		{
 			rect = eyes[0] + cv::Point(faces[i].x, faces[i].y);
-			tpl  = im(rect);
+			tpl  = im(rect);			
 		}
+		
 	}
 
 	return eyes.size();
@@ -185,6 +188,7 @@ void trackEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 	window &= cv::Rect(0, 0, im.cols, im.rows);
 
 	cv::Mat dst(window.width - tpl.rows + 1, window.height - tpl.cols + 1, CV_32FC1);
+	
 	cv::matchTemplate(im(window), tpl, dst, CV_TM_SQDIFF_NORMED);
 
 	double minval, maxval;

@@ -14,12 +14,12 @@ using namespace std;
 int main( int argc, char** argv )
 {
 	
-	//blink_detection();
+	blink_detection();
 	
 	
 	////////////////////////
 	
-	
+	/*
 	ads1015_t adc;
 	int ret = ads1015_init(&adc);
 	if (!ret) 
@@ -50,7 +50,7 @@ int main( int argc, char** argv )
 		cout << "read: " << val << " V" << endl;
 	}
 	ads1015_close(&adc);
-	
+	*/
 	
 	
 	return 0;

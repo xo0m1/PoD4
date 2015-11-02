@@ -46,8 +46,8 @@ int main()
 	// Load the cascade classifiers
 	// Make sure you point the XML files to the right path, or 
 	// just copy the files from [OPENCV_DIR]/data/haarcascades directory
-	face_cascade.load("haarcascade_frontalface_alt2.xml");
-	eye_cascade.load("haarcascade_eye.xml");
+	face_cascade.load("xml/haarcascade_frontalface_alt2.xml");
+	eye_cascade.load("xml/haarcascade_eye.xml");
 	
 	
 	
@@ -185,9 +185,14 @@ void trackEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 	double minval, maxval;
 	cv::Point minloc, maxloc;
 	cv::minMaxLoc(dst, &minval, &maxval, &minloc, &maxloc);
+	
+	//cout << "minval: " << minval << endl;
+	//cout << "maxval: " << maxval << endl;
 
 	if (minval <= 0.2)
 	{
+		//cout << "minval x loc: " << minloc.x << endl;
+		//cout << "minval y loc: " << minloc.y << endl;
 		rect.x = window.x + minloc.x;
 		rect.y = window.y + minloc.y;
 	}
