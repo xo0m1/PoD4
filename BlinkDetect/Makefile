@@ -6,7 +6,7 @@ CFLAGS = -c `pkg-config --cflags opencv` -Wall
 OCVLIBS = `pkg-config --libs opencv`
 LDFLAGS = -lraspicam -lraspicam_cv -lmmal -lmmal_core -lmmal_util -lrt
 LDPATH = -L/opt/vc/lib -L/usr/local/lib
-SOURCES = src/main.cpp src/blink_detection.cpp src/ads1015.c
+SOURCES = src/main_video_v2_2.cpp src/blink_detection_2.cpp src/ads1015.c
 OBJECTS = $(SOURCES:.cpp=.o)
 EXECUTABLE = blinkDetect
 
