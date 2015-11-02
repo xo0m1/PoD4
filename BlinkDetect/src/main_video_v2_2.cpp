@@ -278,7 +278,7 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	//cout << mean << endl;
 	
 	
-	std::vector<std::vector<cv::Point>> contours;
+	std::vector<std::vector<cv::Point> > contours;
 	cv::Mat contourOutput = eyeBin.clone();
 	cv::findContours( contourOutput, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
 
@@ -295,9 +295,43 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	cv::imshow("Contours", contourImage);	
 	
 	
+	// Get contours info
+	//cout << "# of contour points: " << contours[0].size() << endl ;
+	//cout << " Area: " << contourArea(contours[0]) << endl;
+	
+	
+	
+	static int count = 1;
+	static bool prev_blink = false;
+	if (contourArea(contours[0]) > 500 && prev_blink == false)
+	{
+		cout << "blink # " << count++ << endl;
+		prev_blink = true;
+	}
+	else
+	{
+		prev_blink = false;
+	}
+	
+	
+	
+	/*
+	for(unsigned int i=0;i < contours.size();i++)
+	{
+		cout << "# of contour points: " << contours[i].size() << endl ;
+		
+		for(unsigned int j=0;j<contours[i].size();j++)
+		{
+			cout << "Point(x,y)=" << contours[i][j] << endl;
+		}
+		cout << " Area: " << contourArea(contours[i]) << endl;
+	}
+	* */
+	
+	
 	//imshow("face", eyeBin);
 	
-	return sum[0];
+	return 1; //sum[0];
 	
 	
 	
