@@ -7,6 +7,8 @@
 #include <iostream>
 #include "../include/blink_detection.h"
 #include "../include/ads1015.h"
+#include "../include/pulseSensor.h"
+
 
 using namespace std;
 
@@ -14,7 +16,9 @@ using namespace std;
 int main( int argc, char** argv )
 {
 	
-	blink_detection();
+	pulseSensor_task();
+	
+	//blink_detection();
 	
 	
 	////////////////////////
