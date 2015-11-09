@@ -1,26 +1,50 @@
+/*
+******************************************************************************
+ Author      : William A Irizarry
+ Version     : 1
+ Description : Implementation of the pulse monitor algorithm. Algorithm
+				based on Pulse Sensor Amped algorithm 
+				(https://github.com/WorldFamousElectronics/PulseSensor_Amped_Arduino)
+ ============================================================================
+ */
+
+
 
 #include <stdio.h>
 #include <pigpio.h>
 #include "../include/ads1015.h"
 
-
+/************************ Macros **************************************/
 #define GPIO_PIN		4
+
+
+/********************* LOCAL Function Prototypes **********************/
+int saveToFile(int sample);
+void gpioTest(void);
+
+
+/*********************** Function Definitions *************************/
+
+
 /*
-
-void interruptSetup(){     
-  // Initializes Timer2 to throw an interrupt every 2mS.
-  TCCR2A = 0x02;     // DISABLE PWM ON DIGITAL PINS 3 AND 11, AND GO INTO CTC MODE
-  TCCR2B = 0x06;     // DON'T FORCE COMPARE, 256 PRESCALER 
-  OCR2A = 0X7C;      // SET THE TOP OF THE COUNT TO 124 FOR 500Hz SAMPLE RATE
-  TIMSK2 = 0x02;     // ENABLE INTERRUPT ON MATCH BETWEEN TIMER2 AND OCR2A
-  sei();             // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED      
-} 
-*/
-
-
-
-// THIS IS THE TIMER 2 INTERRUPT SERVICE ROUTINE. 
-// Timer 2 makes sure that we take a reading every 2 miliseconds
+** pulseSensor_task
+**
+** Description
+**  
+**
+** Input Arguments:
+**  
+**
+** Output Arguments:
+**  
+**
+** Function Return:
+**  
+**
+** Special Considerations:
+**  None
+**
+**/
 void pulseSensor_task(void)
 {                      
     int N = 0;
@@ -45,76 +69,34 @@ void pulseSensor_task(void)
 	volatile char Pulse = 0;     // true when pulse wave is high, false when it's low
 	volatile char QS = 0;        // becomes true when Arduoino finds a beat.
 	
-	printf("pulseSensor Task\n");
+	printf("pulseSensor Task Started\n");
 	
 	// initialize 
 	if (gpioInitialise() < 0)
 	{
 		// pigpio initialisation failed.
+		printf("pulseSensor: Could not initialize GPIOs\n");
+		return;
 	}
-	else
-	{
-		// pigpio initialised okay.
-	}
-	gpioSetMode(GPIO_PIN, PI_OUTPUT); // Set GPIO_PIN as output.
 	
-	
-	//// GPIO test
-	//char toggle = 1;
-	//for (int i = 0 ; i < 20; i++)
-	//{	
-		//if (gpioSleep(PI_TIME_RELATIVE, 1, 000000)) // mode, sec, microsecs
-		//{
-			//printf("error in sleep\n");
-		//}
-		
-		//gpioWrite(GPIO_PIN, toggle);
-		//toggle = toggle ^ 1; //xor 
-	//}
-	//return;
+	// Set GPIO_PIN as output.
+	gpioSetMode(GPIO_PIN, PI_OUTPUT); 
 
 	
 	// system ticks in milliseconds
 	sampleCounter = gpioTick() / 1000;
-	
-	// system ticks in microseconds
-	//sampleCounter = gpioTick();
+
 	
 	ads1015_t ads;
 	ads1015_init(&ads);
-	
-	int buffer[600];
-	int i = 0;
-	int z = 0;
+	float sig = 0;
 	
 	while (1)
 	{
 		// read the pulse sensor signal
-		//int Signal = readFromADC();
-		
-		float sig = ads1015_getDataFromChannel(&ads, 0) * 1000.0;
+		sig = ads1015_getDataFromChannel(&ads, 0) * 1000.0;
 		Signal = (int)sig;
 		
-		/*
-		z++;
-		
-		if (z > 6000)
-		{
-		buffer[i++] = Signal;
-		
-		if (i >= 600) 
-		{
-			FILE *f = fopen("output.txt", "w");
-			for (int j = 0; j < 600; j++)
-			{
-				fprintf(f, "%d %d\n", j, buffer[j]);
-			}
-			fclose(f);
-			return;  
-		}
-		}
-		*/
-		//printf("%d \n", Signal);
 		
 		// keep track of the time in mS with this variable
 		sampleCounter += 2;   
@@ -132,8 +114,7 @@ void pulseSensor_task(void)
 			if (Signal < T)
 			{               
 				// keep track of lowest point in pulse wave 
-				T = Signal; 
-				                      
+				T = Signal; 	                      
 			}
 		}
 		  
@@ -141,32 +122,32 @@ void pulseSensor_task(void)
 		if(Signal > thresh && Signal > P)
 		{          
 			P = Signal;                             // P is the peak
-		}                                        // keep track of highest point in pulse wave
+		}                                        	// keep track of highest point in pulse wave
 		
 		//  NOW IT'S TIME TO LOOK FOR THE HEART BEAT
 		// signal surges up in value every time there is a pulse
 		if (N > 250)
-		{                                   // avoid high frequency noise
+		{                                   		// avoid high frequency noise
 			if ( (Signal > thresh) && (Pulse == false) && (N > (IBI/5)*3) )
 			{        
 				Pulse = true;                               // set the Pulse flag when we think there is a pulse
-				//digitalWrite(blinkPin,HIGH);                // turn on pin 13 LED
-				gpioWrite(GPIO_PIN, 1); // Set gpio high.
+				gpioWrite(GPIO_PIN, 1); 					// Set gpio high.
 				IBI = sampleCounter - lastBeatTime;         // measure time between beats in mS
 				lastBeatTime = sampleCounter;               // keep track of time for next pulse
 			 
 				if(firstBeat)
-				{                         // if it's the first time we found a beat, if firstBeat == TRUE
-					firstBeat = 0;                 // clear firstBeat flag
-					//return;                            // IBI value is unreliable so discard it
+				{                         			// if it's the first time we found a beat, if firstBeat == TRUE
+					firstBeat = 0;                  // clear firstBeat flag
+													// IBI value is unreliable so discard it
 				}   
 				else 
 				{
 					if(secondBeat)
-					{                        // if this is the second beat, if secondBeat == TRUE
-						secondBeat = 0;                 // clear secondBeat flag
+					{                        		// if this is the second beat, if secondBeat == TRUE
+						secondBeat = 0;             // clear secondBeat flag
 						for(int i=0; i<=9; i++)
-						{         // seed the running total to get a realisitic BPM at startup
+						{         
+							// seed the running total to get a realisitic BPM at startup
 							rate[i] = IBI;                      
 						}
 					}
@@ -175,18 +156,18 @@ void pulseSensor_task(void)
 					int runningTotal = 0;                   // clear the runningTotal variable    
 	
 					for(int i=0; i<=8; i++)
-					{                // shift data in the rate array
-						rate[i] = rate[i+1];              // and drop the oldest IBI value 
-						runningTotal += rate[i];          // add up the 9 oldest IBI values
+					{                					  	// shift data in the rate array
+						rate[i] = rate[i+1];              	// and drop the oldest IBI value 
+						runningTotal += rate[i];          	// add up the 9 oldest IBI values
 					}
 				
 					rate[9] = IBI;                          // add the latest IBI to the rate array
 					runningTotal += rate[9];                // add the latest IBI to runningTotal
-					//runningTotal /= 10;                     // average the last 10 IBI values
+					//runningTotal /= 10;                   // average the last 10 IBI values
 					float rtotal = runningTotal / 10.0;
 					 
-					BPM = (int)(60000.0/rtotal);               // how many beats can fit into a minute? that's BPM!
-					QS = 1;                              // set Quantified Self flag 
+					BPM = (int)(60000.0/rtotal);            // how many beats can fit into a minute? that's BPM!
+					QS = 1;                              	// set Quantified Self flag 
 					
 					printf("%d\n", BPM);
 					// QS FLAG IS NOT CLEARED INSIDE THIS ISR
@@ -239,3 +220,82 @@ void pulseSensor_task(void)
 
 
 
+/*
+** saveToFile
+**
+** Description
+**  Stores numSamples number of samples into a buffer in memory
+**  and then writes the samples to file.
+**
+** Input Arguments:
+**  None
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+int saveToFile(int sample)
+{
+	const int numSamples = 600;
+	static int buffer[numSamples];
+	static int i = 0;
+	static int z = 0;
+	
+	buffer[i++] = sample;
+		
+	if (i >= numSamples) 
+	{
+		FILE *f = fopen("output.txt", "w");
+		for (int j = 0; j < numSamples; j++)
+		{
+			fprintf(f, "%d %d\n", j, buffer[j]);
+		}
+		fclose(f);
+		return 1;  
+	}
+	
+	return 0;
+}
+
+
+/*
+** gpioTest
+**
+** Description
+**  Simple loop to test GPIO output and timing
+**
+** Input Arguments:
+**  None
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+void gpioTest(void)
+{
+	// GPIO test
+	char toggle = 1;
+	for (int i = 0 ; i < 20; i++)
+	{	
+		if (gpioSleep(PI_TIME_RELATIVE, 1, 000000)) // mode, sec, microsecs
+		{
+			printf("error in sleep\n");
+		}
+	
+		gpioWrite(GPIO_PIN, toggle);
+		toggle = toggle ^ 1; //xor 
+	}
+	return;
+}

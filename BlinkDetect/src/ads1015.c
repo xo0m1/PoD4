@@ -1,6 +1,6 @@
 /*
 ******************************************************************************
- Author      : William A Irizarry-Cruz
+ Author      : William A Irizarry
  Version     : 1
  Description : Interface module for the ADS1015 chip
  ============================================================================
