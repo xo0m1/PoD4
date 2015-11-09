@@ -220,13 +220,6 @@ int ads1015_init(ads1015_t *chip)
 		// swap bytes
 		byteSwap(&command);
 		
-		//int byte1 = command & 0x0000FF00;
-		//int byte2 = command & 0x000000FF;	
-		//byte1 = byte1 >> 8;
-		//byte2 = byte2 << 8;	
-		//command = byte1 | byte2;	
-		
-		
 		//command = 0xC323;
 		//command = 0x23C3; // swapped
 		printf("swapped command value: 0x%X\n", command);	
@@ -369,7 +362,7 @@ int ads1015_changeActiveChannel(ads1015_t *chip, int channel)
 **  None
 **
 **/
-int ads1015_getDataFromChannel(ads1015_t *chip, int channel)
+float ads1015_getDataFromChannel(ads1015_t *chip, int channel)
 {	
 	
 	if (ads1015_changeActiveChannel(chip, channel) < 0)
@@ -439,11 +432,6 @@ float ads1015_getDataFromActiveChannel(ads1015_t *chip)
 	// swap the bytes
 	byteSwap((uint16_t *)&ret);
 	
-	//int byte1 = ret & 0x0000FF00;
-	//int byte2 = ret & 0x000000FF;	
-	//byte1 = byte1 >> 8;
-	//byte2 = byte2 << 8;	
-	//ret = byte1 | byte2;	
 	
 	// shift the data right 4 bits, per specs
 	ret = ret >> 4;

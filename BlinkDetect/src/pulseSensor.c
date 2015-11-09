@@ -1,7 +1,10 @@
 
+#include <stdio.h>
 #include <pigpio.h>
+#include "../include/ads1015.h"
 
 
+#define GPIO_PIN		4
 /*
 
 void interruptSetup(){     
@@ -24,9 +27,14 @@ void pulseSensor_task(void)
 	volatile unsigned long sampleCounter = 0;          // used to determine pulse timing
 	volatile unsigned long lastBeatTime = 0;           // used to find the inter beat interval
 	volatile int rate[10];                    // used to hold last ten IBI values
-	volatile int P =512;                      // used to find peak in pulse wave
-	volatile int T = 512;                     // used to find trough in pulse wave
-	volatile int thresh = 512;                // used to find instant moment of heart beat
+	//volatile int P =512;                      // used to find peak in pulse wave
+	//volatile int T = 512;                     // used to find trough in pulse wave
+	//volatile int thresh = 512;                // used to find instant moment of heart beat
+	volatile int P =3500;                      // used to find peak in pulse wave
+	volatile int T = 3500;                     // used to find trough in pulse wave
+	volatile int thresh = 3500;                // used to find instant moment of heart beat
+	
+	
 	volatile int amp = 100;                   // used to hold amplitude of pulse waveform
 	volatile char firstBeat = 1;        // used to seed rate array so we startup with reasonable BPM
 	volatile char secondBeat = 1;       // used to seed rate array so we startup with reasonable BPM
@@ -37,13 +45,76 @@ void pulseSensor_task(void)
 	volatile char Pulse = 0;     // true when pulse wave is high, false when it's low
 	volatile char QS = 0;        // becomes true when Arduoino finds a beat.
 	
+	printf("pulseSensor Task\n");
+	
+	// initialize 
+	if (gpioInitialise() < 0)
+	{
+		// pigpio initialisation failed.
+	}
+	else
+	{
+		// pigpio initialised okay.
+	}
+	gpioSetMode(GPIO_PIN, PI_OUTPUT); // Set GPIO_PIN as output.
+	
+	
+	//// GPIO test
+	//char toggle = 1;
+	//for (int i = 0 ; i < 20; i++)
+	//{	
+		//if (gpioSleep(PI_TIME_RELATIVE, 1, 000000)) // mode, sec, microsecs
+		//{
+			//printf("error in sleep\n");
+		//}
+		
+		//gpioWrite(GPIO_PIN, toggle);
+		//toggle = toggle ^ 1; //xor 
+	//}
+	//return;
+
+	
+	// system ticks in milliseconds
 	sampleCounter = gpioTick() / 1000;
+	
+	// system ticks in microseconds
+	//sampleCounter = gpioTick();
+	
+	ads1015_t ads;
+	ads1015_init(&ads);
+	
+	int buffer[600];
+	int i = 0;
+	int z = 0;
 	
 	while (1)
 	{
 		// read the pulse sensor signal
 		//int Signal = readFromADC();
-		int Signal = 0;	
+		
+		float sig = ads1015_getDataFromChannel(&ads, 0) * 1000.0;
+		Signal = (int)sig;
+		
+		/*
+		z++;
+		
+		if (z > 6000)
+		{
+		buffer[i++] = Signal;
+		
+		if (i >= 600) 
+		{
+			FILE *f = fopen("output.txt", "w");
+			for (int j = 0; j < 600; j++)
+			{
+				fprintf(f, "%d %d\n", j, buffer[j]);
+			}
+			fclose(f);
+			return;  
+		}
+		}
+		*/
+		//printf("%d \n", Signal);
 		
 		// keep track of the time in mS with this variable
 		sampleCounter += 2;   
@@ -51,15 +122,18 @@ void pulseSensor_task(void)
 		
 		N = sampleCounter - lastBeatTime;       // monitor the time since the last beat to avoid noise
 
-	//  find the peak and trough of the pulse wave
-	// avoid dichrotic noise by waiting 3/5 of last IBI
-		if( (Signal < thresh) && (N > (IBI/5)*3) )
+		//  find the peak and trough of the pulse wave
+		// avoid dichrotic noise by waiting 3/5 of last IBI
+		//printf("I: %d\n", IBI);
+		//printf("S: %d, th: %d, N: %d, I: %d\n", Signal, thresh, N , IBI);
+		if( (Signal < thresh) && (N > (IBI / 5) * 3) )
 		{  
 			// T is the trough
 			if (Signal < T)
 			{               
 				// keep track of lowest point in pulse wave 
-				T = Signal;                         
+				T = Signal; 
+				                      
 			}
 		}
 		  
@@ -77,40 +151,46 @@ void pulseSensor_task(void)
 			{        
 				Pulse = true;                               // set the Pulse flag when we think there is a pulse
 				//digitalWrite(blinkPin,HIGH);                // turn on pin 13 LED
+				gpioWrite(GPIO_PIN, 1); // Set gpio high.
 				IBI = sampleCounter - lastBeatTime;         // measure time between beats in mS
 				lastBeatTime = sampleCounter;               // keep track of time for next pulse
 			 
 				if(firstBeat)
 				{                         // if it's the first time we found a beat, if firstBeat == TRUE
 					firstBeat = 0;                 // clear firstBeat flag
-					return;                            // IBI value is unreliable so discard it
+					//return;                            // IBI value is unreliable so discard it
 				}   
-				if(secondBeat)
-				{                        // if this is the second beat, if secondBeat == TRUE
-					secondBeat = 0;                 // clear secondBeat flag
-					for(int i=0; i<=9; i++)
-					{         // seed the running total to get a realisitic BPM at startup
-						rate[i] = IBI;                      
+				else 
+				{
+					if(secondBeat)
+					{                        // if this is the second beat, if secondBeat == TRUE
+						secondBeat = 0;                 // clear secondBeat flag
+						for(int i=0; i<=9; i++)
+						{         // seed the running total to get a realisitic BPM at startup
+							rate[i] = IBI;                      
+						}
 					}
+				  
+					// keep a running total of the last 10 IBI values
+					int runningTotal = 0;                   // clear the runningTotal variable    
+	
+					for(int i=0; i<=8; i++)
+					{                // shift data in the rate array
+						rate[i] = rate[i+1];              // and drop the oldest IBI value 
+						runningTotal += rate[i];          // add up the 9 oldest IBI values
+					}
+				
+					rate[9] = IBI;                          // add the latest IBI to the rate array
+					runningTotal += rate[9];                // add the latest IBI to runningTotal
+					//runningTotal /= 10;                     // average the last 10 IBI values
+					float rtotal = runningTotal / 10.0;
+					 
+					BPM = (int)(60000.0/rtotal);               // how many beats can fit into a minute? that's BPM!
+					QS = 1;                              // set Quantified Self flag 
+					
+					printf("%d\n", BPM);
+					// QS FLAG IS NOT CLEARED INSIDE THIS ISR
 				}
-			  
-				// keep a running total of the last 10 IBI values
-				int runningTotal = 0;                   // clear the runningTotal variable    
-
-				for(int i=0; i<=8; i++)
-				{                // shift data in the rate array
-					rate[i] = rate[i+1];              // and drop the oldest IBI value 
-					runningTotal += rate[i];          // add up the 9 oldest IBI values
-				}
-			
-				rate[9] = IBI;                          // add the latest IBI to the rate array
-				runningTotal += rate[9];                // add the latest IBI to runningTotal
-				//runningTotal /= 10;                     // average the last 10 IBI values
-				float rtotal = runningTotal / 10.0;
-				 
-				BPM = (int)(60000.0/rtotal);               // how many beats can fit into a minute? that's BPM!
-				QS = 1;                              // set Quantified Self flag 
-				// QS FLAG IS NOT CLEARED INSIDE THIS ISR
 			}                       
 		}
 
@@ -118,6 +198,7 @@ void pulseSensor_task(void)
 		if (Signal < thresh && Pulse == true)
 		{     
 			//digitalWrite(blinkPin,LOW);            // turn off pin 13 LED
+			gpioWrite(GPIO_PIN, 0); // Set gpio low
 			Pulse = 0;                         // reset the Pulse flag so we can do it again
 			amp = P - T;                           // get amplitude of the pulse wave
 			thresh = amp/2 + T;                    // set thresh at 50% of the amplitude
@@ -128,24 +209,30 @@ void pulseSensor_task(void)
 		// if 2.5 seconds go by without a beat
 		if (N > 2500)
 		{                             
-			thresh = 512;                          // set thresh default
-			P = 512;                               // set P default
-			T = 512;                               // set T default
+			//thresh = 512;                          // set thresh default
+			//P = 512;                               // set P default
+			//T = 512;                               // set T default
+			thresh = 3500;                          // set thresh default
+			P = 3500;                               // set P default
+			T = 3500;                               // set T default
+			IBI  = 600;
 			lastBeatTime = sampleCounter;          // bring the lastBeatTime up to date        
 			firstBeat = 1;                      // set these to avoid noise
 			secondBeat = 1;                     // when we get the heartbeat back
 		}  
 		
 		// sleep for 2 ms
-		struct timespec ts, rem;  
-		ts.tv_sec = 0;
-		ts.tv_nsec = 2 * 1E6;
-		while (clock_nanosleep(CLOCK_REALTIME, 0, &ts, &rem))
-		{
-			/* copy remaining time to ts */
-			ts.tv_sec  = rem.tv_sec;
-			ts.tv_nsec = rem.tv_nsec;
-		}
+		gpioSleep(PI_TIME_RELATIVE, 0, 2000);
+		
+		//struct timespec ts, rem;  
+		//ts.tv_sec = 0;
+		//ts.tv_nsec = 2 * 1E6;
+		//while (clock_nanosleep(CLOCK_REALTIME, 0, &ts, &rem))
+		//{
+			///* copy remaining time to ts */
+			//ts.tv_sec  = rem.tv_sec;
+			//ts.tv_nsec = rem.tv_nsec;
+		//}
 		
 	} // end of while loop
 }

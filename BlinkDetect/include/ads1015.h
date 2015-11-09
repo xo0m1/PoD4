@@ -108,7 +108,7 @@ int ads1015_changeActiveChannel(ads1015_t *chip, int channel);
 **  None
 **
 **/
-int ads1015_getDataFromChannel(ads1015_t *chip, int channel);
+float ads1015_getDataFromChannel(ads1015_t *chip, int channel);
 
 
 
