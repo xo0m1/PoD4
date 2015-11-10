@@ -1,5 +1,6 @@
 /*
-******************************************************************************
+/*
+ =============================================================================
  Author      : William A Irizarry
  Version     : 1
  Description : Implementation of the pulse monitor algorithm. Algorithm
@@ -10,12 +11,12 @@
 
 
 
-#include <stdio.h>
-#include <pigpio.h>
-#include "../include/ads1015.h"
+
+#include "../include/common.h"
+
 
 /************************ Macros **************************************/
-#define GPIO_PIN		4
+
 
 
 /********************* LOCAL Function Prototypes **********************/
@@ -45,7 +46,7 @@ void gpioTest(void);
 **  None
 **
 **/
-void pulseSensor_task(void)
+void *pulseSensor_task(void *arg)
 {                      
     int N = 0;
 	volatile unsigned long sampleCounter = 0;          // used to determine pulse timing
@@ -69,19 +70,9 @@ void pulseSensor_task(void)
 	volatile char Pulse = 0;     // true when pulse wave is high, false when it's low
 	volatile char QS = 0;        // becomes true when Arduoino finds a beat.
 	
-	printf("pulseSensor Task Started\n");
+	printf("pulseSensor: Task Started %s\n", arg);
 	
-	// initialize 
-	if (gpioInitialise() < 0)
-	{
-		// pigpio initialisation failed.
-		printf("pulseSensor: Could not initialize GPIOs\n");
-		return;
-	}
 	
-	// Set GPIO_PIN as output.
-	gpioSetMode(GPIO_PIN, PI_OUTPUT); 
-
 	
 	// system ticks in milliseconds
 	sampleCounter = gpioTick() / 1000;

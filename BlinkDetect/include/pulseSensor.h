@@ -1,5 +1,5 @@
 /*
-******************************************************************************
+ =============================================================================
  Author      : William A Irizarry
  Version     : 1
  Description : Implementation of the pulse monitor algorithm. Algorithm
@@ -14,7 +14,7 @@
 #define _PULSESENSOR_H_
 
 
-void pulseSensor_task(void);
+void *pulseSensor_task(void *arg);
 
 
 
