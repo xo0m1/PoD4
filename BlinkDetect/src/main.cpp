@@ -14,6 +14,8 @@
 #include "../include/common.h"
 #include "../include/blinkDetectModule.h"
 #include "../include/pulseSensor.h"
+#include "../include/proximitySensor.h"
+#include "../include/pressureSensor.h"
 
 /************************ Macros **************************************/
 
@@ -53,21 +55,24 @@ int main( int argc, char** argv )
 		return -1;
 	}
 	
-	// Set GPIO_PIN as output.
+	// Set GPIOs as output.
 	gpioSetMode(GPIO_PIN, PI_OUTPUT); 
+	gpioSetMode(PROXIMITY_SENSOR_GPIO_PIN, PI_OUTPUT); 
+	
 	
 	// Register a function to be called when SIGINT occurs
-	gpioSetSignalFunc(SIGINT, (gpioSignalFunc_t)exitingFunction);
+	//gpioSetSignalFunc(SIGINT, (gpioSignalFunc_t)exitingFunction);
 	
 
 
-	p1 = gpioStartThread(&pulseSensor_task, (void *)"thread 1"); 
+	//p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1"); 
+	//sleep(3);
+	
+	//p2 = gpioStartThread(blinkDetect_task, (void *)"thread 2"); 
+	//sleep(3);
+	
+	p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3"); 
 	sleep(3);
-	
-	p2 = gpioStartThread(&blinkDetect_task, (void *)"thread 2"); 
-	sleep(3);
-	
-	
    
 	/*
 	p2 = gpioStartThread(myfunc, "thread 2"); sleep(3);
@@ -80,12 +85,14 @@ int main( int argc, char** argv )
 	
 	//blinkDetect_task();
 
+
 	while (1)
 	{
 		gpioSleep(PI_TIME_RELATIVE, 10, 000000);
 	}
 	
 	
+	gpioTerminate();
 	return 0;
 	
 }

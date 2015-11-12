@@ -22,9 +22,13 @@
 
 /************************ Macros **************************************/
 
-#define GPIO_PIN		4
+#define GPIO_PIN						4
+#define PROXIMITY_SENSOR_GPIO_PIN		22
+#define PRESSURE_SENSOR_GPIO_PIN		6
 
-
+#define PULSE_SENSOR_ADC_CHANNEL		0
+#define PROXIMITY_SENSOR_ADC_CHANNEL	1
+#define PRESSURE_SENSOR_ADC_CHANNEL		2
 
 
 
