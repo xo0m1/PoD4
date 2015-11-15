@@ -138,6 +138,7 @@ int main()
 			break;
 		}
 			
+			//cout <<" g " << endl;
 		// Resizing the image to a smaller size
 		resize(image_cam, image, size); 
 		
@@ -262,7 +263,10 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	cv::Rect rightEyeRegion(face.width - eye_region_width - face.width*(kEyePercentSide/100.0),
 						  eye_region_top,eye_region_width,eye_region_height);
 	
-	//cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
+	// Show the rectangle on the left eye
+	cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
+	cv::imshow("face", faceROI);
+	////////////////////////////////	
 	
 	cv::Mat eyeL = faceROI(leftEyeRegion);
 	
@@ -292,7 +296,9 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
     {
         cv::drawContours(contourImage, contours, idx, colors[idx % 3]);
     }
-	cv::imshow("Contours", contourImage);	
+    
+    // Show the contour image of the left eye
+	//cv::imshow("Contours", contourImage);	
 	
 	
 	// Get contours info
