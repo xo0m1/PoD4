@@ -36,6 +36,8 @@ static pthread_t *p3;
 sem_t mutex_adc;
 sem_t mutex_gpio;
 
+int DeltaDistance = 0;
+
 /************************** Namespaces ********************************/
 
 using namespace std;
@@ -103,13 +105,13 @@ int main( int argc, char** argv )
 	p2 = gpioStartThread(pressureSensor_task, (void *)"thread 2 - PRESSURE SENSOR"); 
 	sleep(1);
 
-	//p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3 - PROXIMITY SENSOR"); 
-	//sleep(1);
+	p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3 - PROXIMITY SENSOR"); 
+	sleep(1);
   
   
 	//pthread_join(*p1, NULL);
     pthread_join(*p2, NULL);
-    //pthread_join(*p3, NULL);
+    pthread_join(*p3, NULL);
     
 
 	
