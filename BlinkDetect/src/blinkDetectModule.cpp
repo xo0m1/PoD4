@@ -14,13 +14,18 @@
 
 
 
-#include "../include/common.h"
+#include <iostream>
 #include "opencv2/objdetect/objdetect.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/videoio.hpp"
 #include <raspicam/raspicamtypes.h>
 #include <raspicam/raspicam_cv.h>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 
 
@@ -101,13 +106,38 @@ using namespace cv;
 **
 **/
 
-void *blinkDetect_task(void *arg)
-//int blinkDetect_task()
+//void *blinkDetect_task(void *arg)
+int blinkDetect_task()
 {
 	// welcome message
-	printf("blinkdetect: Task Started %s\n", arg);
+	cout << "blinkdetect: Task Started " << endl;
 	
 	
+	//FILE * fd;
+	int fd;
+    char * myfifo = "/tmp/blinkDfifo";
+
+    // create the FIFO (named pipe) 
+    mkfifo(myfifo, 0666);
+
+    // write "Hi" to the FIFO 
+    //fd = fopen(myfifo, "w");
+    fd = open(myfifo, O_WRONLY);
+    
+    char buffer[5];
+    
+    for(int i = 0; i < 5; i++)
+    {
+		snprintf(buffer,5, "%2d", i+1);
+		write(fd, buffer, sizeof(buffer));
+		//fprintf(fd, "%2d", i+1);
+		sleep(2);
+	}
+	
+	
+    
+	
+#if 0	
 	// Load the cascade classifiers
 	// Make sure you point the XML files to the right path, or 
 	// just copy the files from [OPENCV_DIR]/data/haarcascades directory
@@ -152,14 +182,14 @@ void *blinkDetect_task(void *arg)
 	//Size size(640,480);
 	Size size(320,240);
 	cv::Mat image;
-	int counter = 0;
+	//int counter = 0;
 	
 	cout << "Let's begin!" << endl;
 	
 	//const int bufferSize = 5; 
-	double sumBuffer[BUFFER_SIZE];
+	//double sumBuffer[BUFFER_SIZE];
 	double sum = 0;
-	int index = 0;
+	//int index = 0;
 
 	while (cv::waitKey(15) != 'q')
 	{
@@ -211,6 +241,12 @@ void *blinkDetect_task(void *arg)
 			*/
 		
 	}
+#endif	
+	// close
+	close(fd);
+	
+	// remove the FIFO 
+    unlink(myfifo);
 
 	return 0;
 }

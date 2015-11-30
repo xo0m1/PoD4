@@ -14,17 +14,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
+#include <unistd.h>
 #include <signal.h>
+#include <pthread.h>    
+#include <semaphore.h>  
 
 #include <pigpio.h>
 #include "../include/ads1015.h"
 
 /************************ Macros **************************************/
 
-#define GPIO_PIN						4
-#define PROXIMITY_SENSOR_GPIO_PIN		22
-#define PRESSURE_SENSOR_GPIO_PIN		6
+#define PULSE_SENSOR_GPIO_PIN			21
+#define PROXIMITY_SENSOR_GPIO_PIN		16
+#define PRESSURE_SENSOR_GPIO_PIN		12
 
 #define PULSE_SENSOR_ADC_CHANNEL		0
 #define PROXIMITY_SENSOR_ADC_CHANNEL	1

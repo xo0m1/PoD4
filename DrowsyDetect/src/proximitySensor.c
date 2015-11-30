@@ -14,7 +14,9 @@
 
 /************************ Macros **************************************/
 
-
+/*************************** Globals **********************************/
+extern sem_t mutex_adc;
+extern sem_t mutex_gpio;
 
 /********************* LOCAL Function Prototypes **********************/
 static long map(long x, long in_min, long in_max, long out_min, long out_max);
@@ -25,38 +27,56 @@ static long map(long x, long in_min, long in_max, long out_min, long out_max);
 void *proximitySensor_task(void *arg)
 {
 	
-	printf("proximity: Task Started %s\n", arg);
+	printf("proximity: Task Started %s\n", (char *)arg);
 	
 	ads1015_t ads;
 	ads1015_init(&ads);
 	
 	float voltage = 0;
 	int scaledVoltage = 0;
-	float distance = 0;
+	//float distance = 0;
+	
+	
 	
 	while(1)
 	{
 	
 		// read the pulse sensor signal
+		sem_wait(&mutex_adc);
 		voltage = ads1015_getDataFromChannel(&ads, PROXIMITY_SENSOR_ADC_CHANNEL);
+		usleep(400);
+		voltage = ads1015_getDataFromChannel(&ads, PROXIMITY_SENSOR_ADC_CHANNEL);
+		sem_post(&mutex_adc);
 		
-		// scale the voltage to PWM values
-		scaledVoltage = map((int)(voltage * 1000), 400, 4096, 0, 255);
-		if (scaledVoltage > 255) scaledVoltage = 255;
+		//if (voltage*1000 > 400)
+		if (voltage > 0)
+		{
+			
+			// scale the voltage to PWM values
+			scaledVoltage = map((int)(voltage * 1000), 300, 4096, 0, 255);
+			if (scaledVoltage > 255) scaledVoltage = 255;
+			//fprintf(stderr,"d= %d\n", scaledVoltage );
+			
+			// Set the LED brightness value
+			sem_wait(&mutex_gpio);
+			gpioPWM(PROXIMITY_SENSOR_GPIO_PIN, scaledVoltage);
+			sem_post(&mutex_gpio);
+			
+			
+			
+			// distance calculation in ft (max detected range is 15 meters, and 3.28 ft in 1 m)
+			scaledVoltage = map((int)(voltage * 1000), 300, 4096, (15 *  3.28 * 100), 0);
+			if (scaledVoltage > 4920) scaledVoltage = 4920;
+			
+			//printf("d= %d ft\n", scaledVoltage / 100);
+			//fprintf(stderr,"d= %f\n", voltage );
 		
-		// Set the LED brightness value
-		gpioPWM(PROXIMITY_SENSOR_GPIO_PIN, scaledVoltage);
-		
-		// distance calculation in ft (max detected range is 15 meters, and 3.28 ft in 1 m)
-		scaledVoltage = map((int)(voltage * 1000), 400, 4096, 0, (15 *  3.28 * 100));
-		if (scaledVoltage > 4920) scaledVoltage = 4920;
-		
-		//printf("d= %d ft\n", scaledVoltage / 100);
-		
-		
+		}
 		
 		// sleep for 100 ms
-		gpioSleep(PI_TIME_RELATIVE, 0, 100000);
+		usleep(100300);
+		//usleep(2000);
+		//gpioSleep(PI_TIME_RELATIVE, 0, 100000);
 	
 	}
 	

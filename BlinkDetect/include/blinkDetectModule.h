@@ -16,8 +16,8 @@
 
 
 
-void *blinkDetect_task(void *arg);
-//int blinkDetect_task( void );
+//void *blinkDetect_task(void *arg);
+int blinkDetect_task( void );
 
 
 

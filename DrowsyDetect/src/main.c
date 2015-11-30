@@ -9,16 +9,18 @@
  ============================================================================
  */
 
-
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "../include/common.h"
-#include "../include/blinkDetectModule.h"
 #include "../include/pulseSensor.h"
 #include "../include/proximitySensor.h"
 #include "../include/pressureSensor.h"
 
 /************************ Macros **************************************/
-
+#define MAX_BUF 1024
 
 
 /********************* LOCAL Function Prototypes **********************/
@@ -30,6 +32,9 @@ void exitingFunction(int signo);
 static pthread_t *p1;
 static pthread_t *p2;
 static pthread_t *p3;
+
+sem_t mutex_adc;
+sem_t mutex_gpio;
 
 /************************** Namespaces ********************************/
 
@@ -45,54 +50,76 @@ using namespace std;
 // Main function, defines the entry point for the program.
 int main( int argc, char** argv )
 {
+	// Welcome message
+	fprintf(stderr,"drowsyDetect Main\n"); 
 	
+	
+	// initialize the semaphore
+	sem_init(&mutex_adc, 0, 1); 
+	sem_init(&mutex_gpio, 0, 1);
 	
 	// initialize the GPIO module
 	if (gpioInitialise() < 0)
 	{
 		// pigpio initialisation failed.
-		printf("main: Could not initialize GPIOs\n");
+		fprintf(stderr, "main: Could not initialize GPIOs\n");
 		return -1;
 	}
 	
 	// Set GPIOs as output.
-	gpioSetMode(GPIO_PIN, PI_OUTPUT); 
+	gpioSetMode(PULSE_SENSOR_GPIO_PIN, PI_OUTPUT); 
+	gpioSetMode(PRESSURE_SENSOR_GPIO_PIN, PI_OUTPUT);
 	gpioSetMode(PROXIMITY_SENSOR_GPIO_PIN, PI_OUTPUT); 
 	
 	
 	// Register a function to be called when SIGINT occurs
 	//gpioSetSignalFunc(SIGINT, (gpioSignalFunc_t)exitingFunction);
-	
-
-
-	//p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1"); 
-	//sleep(3);
-	
-	//p2 = gpioStartThread(blinkDetect_task, (void *)"thread 2"); 
-	//sleep(3);
-	
-	p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3"); 
-	sleep(3);
-   
 	/*
-	p2 = gpioStartThread(myfunc, "thread 2"); sleep(3);
-	p3 = gpioStartThread(myfunc, "thread 3"); sleep(3);
+	int fd;
+    char * myfifo = "/tmp/blinkDfifo";
+    char buf[MAX_BUF];
+
+    // open, read, and display the message from the FIFO 
+    fd = open(myfifo, O_RDONLY);
+    
+    for(int i = 0; i < 5; i++)
+    {
+		read(fd, buf, 5); //MAX_BUF);
+		fprintf(stderr,"Received: %s\n", buf); 
+		//fflush(stdout); 
+	}
+	
+	sleep(4);
+    close(fd); 
+    
+    return 0;
 	*/
 
 
-	
-	//pulseSensor_task();
-	
-	//blinkDetect_task();
 
+	//p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1 - PULSE SENSOR"); 
+	//sleep(1);
+	
+	p2 = gpioStartThread(pressureSensor_task, (void *)"thread 2 - PRESSURE SENSOR"); 
+	sleep(1);
 
-	while (1)
-	{
-		gpioSleep(PI_TIME_RELATIVE, 10, 000000);
-	}
+	//p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3 - PROXIMITY SENSOR"); 
+	//sleep(1);
+  
+  
+	//pthread_join(*p1, NULL);
+    pthread_join(*p2, NULL);
+    //pthread_join(*p3, NULL);
+    
+
 	
-	
+	// terminate the gpio module
 	gpioTerminate();
+	
+	// destroy the semaphore
+	sem_destroy(&mutex_gpio);
+	sem_destroy(&mutex_adc);
+	
 	return 0;
 	
 }
@@ -122,12 +149,12 @@ int main( int argc, char** argv )
 **/
 void exitingFunction(int signo)
 {
-	cout<< "Exiting..." << endl;
-	//gpioStopThread(p3); sleep(3);
+	printf("Exiting...\n"); 
+	gpioStopThread(p3); sleep(3);
 	gpioStopThread(p2); sleep(3);
 	gpioStopThread(p1); sleep(3);
 	gpioTerminate();
-	cout<< "Good bye!" << endl;
+	printf("Good bye!\n");
 	exit(1);
 	
 }
@@ -162,7 +189,7 @@ int testADC(void)
 	int ret = ads1015_init(&adc);
 	if (!ret) 
 	{
-		cout << "ERROR initializing ADC" << endl;
+		fprintf(stderr,"ERROR initializing ADC\n");
 		return 0;
 	}
 	
@@ -170,7 +197,7 @@ int testADC(void)
 	ret = ads1015_changeActiveChannel(&adc, 3);
 	if (ret < 0) 
 	{
-		cout << "ERROR changing channel in ADC" << endl;
+		fprintf(stderr,"ERROR changing channel in ADC\n");
 		return 0;
 	}
 	
@@ -182,10 +209,10 @@ int testADC(void)
 		float val = ads1015_getDataFromActiveChannel(&adc);
 		if (ret < 0) 
 		{
-			cout << "ERROR reading from ADC" << endl;
+			fprintf(stderr,"ERROR reading from ADC\n");
 			return 0;
 		}
-		cout << "read: " << val << " V" << endl;
+		printf(" read: %f V\n",val);
 	}
 	ads1015_close(&adc);
 	

@@ -15,6 +15,10 @@
 /************************ Macros **************************************/
 
 
+/*************************** Globals **********************************/
+extern sem_t mutex_adc;
+extern sem_t mutex_gpio;
+
 
 /********************* LOCAL Function Prototypes **********************/
 static long map(long x, long in_min, long in_max, long out_min, long out_max);
@@ -26,7 +30,7 @@ static long map(long x, long in_min, long in_max, long out_min, long out_max);
 void *pressureSensor_task(void *arg)
 {
 	
-	printf("pressure: Task Started %s\n", arg);
+	printf("pressure: Task Started %s\n", (char *)arg);
 	
 	ads1015_t ads;
 	ads1015_init(&ads);
@@ -34,21 +38,38 @@ void *pressureSensor_task(void *arg)
 	float voltage = 0;
 	int scaledVoltage = 0;
 	float pressure = 0;
+	int prev_value = 0;
 	
 	while(1)
 	{
 	
 		// read the pulse sensor signal
+		sem_wait(&mutex_adc);
 		voltage = ads1015_getDataFromChannel(&ads, PRESSURE_SENSOR_ADC_CHANNEL);
+		sem_post(&mutex_adc);
 		
-		printf("d= %f\n", voltage);
+		//printf("d= %f\n", voltage);
 		
 		// scale the voltage to PWM values
-		scaledVoltage = map((int)(voltage * 1000), 0, 4096, 0, 255);
+		scaledVoltage = map((int)(voltage * 1000), 1500, 4096, 0, 255);
 		if (scaledVoltage > 255) scaledVoltage = 255;
 		
+		// guard against negative values for PWM
+		if (scaledVoltage < 0)
+		{
+			scaledVoltage = prev_value;
+		}
+		else
+		{
+			prev_value = scaledVoltage;
+		}
+		
+		
 		// Set the LED brightness value
+		sem_wait(&mutex_gpio);
 		gpioPWM(PRESSURE_SENSOR_GPIO_PIN, scaledVoltage);
+		sem_post(&mutex_gpio);
+		
 		
 		// distance calculation in ft (max detected range is 15 meters, and 3.28 ft in 1 m)
 		//scaledVoltage = map((int)(voltage * 1000), 400, 4096, 0, (15 *  3.28 * 100);
@@ -59,7 +80,8 @@ void *pressureSensor_task(void *arg)
 		
 		
 		// sleep for 230 ms
-		gpioSleep(PI_TIME_RELATIVE, 0, 230000);
+		usleep(230000);
+		
 	
 	}
 	

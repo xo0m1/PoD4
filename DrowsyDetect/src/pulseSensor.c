@@ -1,5 +1,4 @@
 /*
-/*
  =============================================================================
  Author      : William A Irizarry
  Version     : 1
@@ -17,6 +16,11 @@
 
 /************************ Macros **************************************/
 
+
+/*************************** Globals **********************************/
+extern sem_t mutex_adc;
+extern sem_t mutex_gpio;
+char retBuf[10];
 
 
 /********************* LOCAL Function Prototypes **********************/
@@ -70,7 +74,7 @@ void *pulseSensor_task(void *arg)
 	volatile char Pulse = 0;     // true when pulse wave is high, false when it's low
 	volatile char QS = 0;        // becomes true when Arduoino finds a beat.
 	
-	printf("pulseSensor: Task Started %s\n", arg);
+	printf("pulseSensor: Task Started %s\n", (char *)arg);
 	
 	
 	
@@ -85,7 +89,12 @@ void *pulseSensor_task(void *arg)
 	while (1)
 	{
 		// read the pulse sensor signal
-		sig = ads1015_getDataFromChannel(&ads, 0) * 1000.0;
+		sem_wait(&mutex_adc);
+		//sig = ads1015_getDataFromChannel(&ads, PULSE_SENSOR_ADC_CHANNEL);
+		//usleep(400);
+		sig = ads1015_getDataFromChannel(&ads, PULSE_SENSOR_ADC_CHANNEL) * 1000.0;
+		sem_post(&mutex_adc);
+		
 		Signal = (int)sig;
 		
 		
@@ -122,7 +131,9 @@ void *pulseSensor_task(void *arg)
 			if ( (Signal > thresh) && (Pulse == false) && (N > (IBI/5)*3) )
 			{        
 				Pulse = true;                               // set the Pulse flag when we think there is a pulse
-				gpioWrite(GPIO_PIN, 1); 					// Set gpio high.
+				sem_wait(&mutex_gpio);
+				gpioWrite(PULSE_SENSOR_GPIO_PIN, 1);		// Set gpio high.
+				sem_post(&mutex_gpio);
 				IBI = sampleCounter - lastBeatTime;         // measure time between beats in mS
 				lastBeatTime = sampleCounter;               // keep track of time for next pulse
 			 
@@ -169,8 +180,10 @@ void *pulseSensor_task(void *arg)
 		// when the values are going down, the beat is over
 		if (Signal < thresh && Pulse == true)
 		{     
-			//digitalWrite(blinkPin,LOW);            // turn off pin 13 LED
-			gpioWrite(GPIO_PIN, 0); // Set gpio low
+			sem_wait(&mutex_gpio);
+			gpioWrite(PULSE_SENSOR_GPIO_PIN, 0); // Set gpio low
+			sem_post(&mutex_gpio);
+			
 			Pulse = 0;                         // reset the Pulse flag so we can do it again
 			amp = P - T;                           // get amplitude of the pulse wave
 			thresh = amp/2 + T;                    // set thresh at 50% of the amplitude
@@ -194,7 +207,9 @@ void *pulseSensor_task(void *arg)
 		}  
 		
 		// sleep for 2 ms
-		gpioSleep(PI_TIME_RELATIVE, 0, 2000);
+		usleep(2000);
+		
+		
 		
 		//struct timespec ts, rem;  
 		//ts.tv_sec = 0;
@@ -207,6 +222,10 @@ void *pulseSensor_task(void *arg)
 		//}
 		
 	} // end of while loop
+	
+	
+	snprintf(retBuf,10,"%d", QS); 
+	return (void *)retBuf;
 }
 
 
@@ -236,7 +255,6 @@ int saveToFile(int sample)
 	const int numSamples = 600;
 	static int buffer[numSamples];
 	static int i = 0;
-	static int z = 0;
 	
 	buffer[i++] = sample;
 		
@@ -285,7 +303,7 @@ void gpioTest(void)
 			printf("error in sleep\n");
 		}
 	
-		gpioWrite(GPIO_PIN, toggle);
+		gpioWrite(PULSE_SENSOR_GPIO_PIN, toggle);
 		toggle = toggle ^ 1; //xor 
 	}
 	return;
