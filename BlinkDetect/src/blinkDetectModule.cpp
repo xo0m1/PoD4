@@ -113,22 +113,20 @@ int blinkDetect_task()
 	cout << "blinkdetect: Task Started " << endl;
 	
 	
-	//FILE * fd;
 	int fd;
-    char * myfifo = "/tmp/blinkDfifo";
+    char myfifo[] = "/tmp/blinkDfifo";
 
     // create the FIFO (named pipe) 
     mkfifo(myfifo, 0666);
 
     // write "Hi" to the FIFO 
-    //fd = fopen(myfifo, "w");
     fd = open(myfifo, O_WRONLY);
     
     char buffer[5];
     
     for(int i = 0; i < 5; i++)
     {
-		snprintf(buffer,5, "%2d", i+1);
+		snprintf(buffer,5, "%2d", i+2);
 		write(fd, buffer, sizeof(buffer));
 		//fprintf(fd, "%2d", i+1);
 		sleep(2);

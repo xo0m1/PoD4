@@ -18,6 +18,7 @@
 
 //#define CONFIGURE_ADC						1
 #define ADS1015_I2C_ADDRESS					0x48
+#define ADS1015_PULSE_I2C_ADDRESS			0x49
 
 
 // Pointer Register

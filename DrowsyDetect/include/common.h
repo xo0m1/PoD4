@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <signal.h>
 #include <pthread.h>    
 #include <semaphore.h>  
@@ -24,6 +25,7 @@
 
 /************************ Macros **************************************/
 
+#define BUZZER_GPIO_PIN					18
 #define PULSE_SENSOR_GPIO_PIN			21
 #define PROXIMITY_SENSOR_GPIO_PIN		16
 #define PRESSURE_SENSOR_GPIO_PIN		12

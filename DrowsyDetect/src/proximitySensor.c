@@ -18,6 +18,8 @@
 extern sem_t mutex_adc;
 extern sem_t mutex_gpio;
 
+extern int DeltaProximity;
+
 /********************* LOCAL Function Prototypes **********************/
 static long map(long x, long in_min, long in_max, long out_min, long out_max);
 
@@ -90,11 +92,14 @@ void *proximitySensor_task(void *arg)
 			}
 			avg = avg / 5;
 			delta = (scaledVoltage - avg);
-			fprintf(stderr,"d= %d\n", delta );
+			//fprintf(stderr,"d= %d\n", delta );
+			
+			// report to main thread
+			DeltaProximity = delta;
 			
 			// Put current value into the averaging window
 			window[index++] = scaledVoltage;
-			if (index >= 5) index = 0;
+			if (index >= 5) { index = 0; }
 			
 			
 			

@@ -20,23 +20,38 @@
 #include "../include/pressureSensor.h"
 
 /************************ Macros **************************************/
-#define MAX_BUF 1024
+#define MAX_BUF 5
+
+//#define BLINKDETECT_PIPE
 
 
 /********************* LOCAL Function Prototypes **********************/
 int testADC(void);
 void exitingFunction(int signo);
+void *buzzer_task(void *arg);
+void sensorFusionAlgorithm(void);
 
 /*************************** Globals **********************************/
+
+sem_t mutex_adc;
+sem_t mutex_gpio;
+sem_t sem_buzzer;
+
+
+volatile int DeltaProximity = 0;
+volatile int DeltaPressure = 0;
+volatile int Pressure = 0;
+
 
 static pthread_t *p1;
 static pthread_t *p2;
 static pthread_t *p3;
+static pthread_t *p4;
 
-sem_t mutex_adc;
-sem_t mutex_gpio;
 
-int DeltaDistance = 0;
+static int fifofd = -1;
+static char myfifo[] = "/tmp/blinkDfifo";
+
 
 /************************** Namespaces ********************************/
 
@@ -59,6 +74,7 @@ int main( int argc, char** argv )
 	// initialize the semaphore
 	sem_init(&mutex_adc, 0, 1); 
 	sem_init(&mutex_gpio, 0, 1);
+	sem_init(&sem_buzzer, 0, 0);
 	
 	// initialize the GPIO module
 	if (gpioInitialise() < 0)
@@ -72,48 +88,59 @@ int main( int argc, char** argv )
 	gpioSetMode(PULSE_SENSOR_GPIO_PIN, PI_OUTPUT); 
 	gpioSetMode(PRESSURE_SENSOR_GPIO_PIN, PI_OUTPUT);
 	gpioSetMode(PROXIMITY_SENSOR_GPIO_PIN, PI_OUTPUT); 
+	gpioSetMode(BUZZER_GPIO_PIN, PI_OUTPUT); 
+	
+	// reset the gpio state of the buzzer
+	gpioWrite(BUZZER_GPIO_PIN, 0);		// Set gpio low
 	
 	
 	// Register a function to be called when SIGINT occurs
 	//gpioSetSignalFunc(SIGINT, (gpioSignalFunc_t)exitingFunction);
-	/*
-	int fd;
-    char * myfifo = "/tmp/blinkDfifo";
-    char buf[MAX_BUF];
-
-    // open, read, and display the message from the FIFO 
-    fd = open(myfifo, O_RDONLY);
-    
-    for(int i = 0; i < 5; i++)
-    {
-		read(fd, buf, 5); //MAX_BUF);
-		fprintf(stderr,"Received: %s\n", buf); 
-		//fflush(stdout); 
-	}
 	
-	sleep(4);
-    close(fd); 
-    
-    return 0;
-	*/
-
 
 
 	//p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1 - PULSE SENSOR"); 
 	//sleep(1);
 	
+	p4 = gpioStartThread(buzzer_task, (void *)"thread 4 - BUZZER"); 
+	sleep(1);
+
 	p2 = gpioStartThread(pressureSensor_task, (void *)"thread 2 - PRESSURE SENSOR"); 
 	sleep(1);
 
 	p3 = gpioStartThread(proximitySensor_task, (void *)"thread 3 - PROXIMITY SENSOR"); 
 	sleep(1);
-  
-  
+
+#ifdef BLINKDETECT_PIPE	
+	// wait until the named pipe has been created and then open the pipe (FIFO)
+	fprintf(stderr,"drowsyDetect Main - Waiting for pipe creation\n"); 
+	while(fifofd < 0)
+	{
+		fifofd = open(myfifo, O_RDONLY);
+		usleep(1000);
+	}
+	
+	//This will force the read() to be a non blocking system call
+	int flags = fcntl(fifofd, F_GETFL, 0);
+	fcntl(fifofd, F_SETFL, flags | O_NONBLOCK);
+#endif
+	
+	// Inform user we are ready
+    fprintf(stderr,"drowsyDetect Main - Init OK. Ready to start Sensor Fusion Algorith\n"); 
+	
+	// run sensor fusion algorithm
+	sensorFusionAlgorithm();
+	
+	
+	fprintf(stderr,"drowsyDetect Main - ERROR. Not supposed to be here!\n"); 
+	
+	
+	// Wait for the threads to terminate
 	//pthread_join(*p1, NULL);
+	pthread_join(*p4, NULL);
     pthread_join(*p2, NULL);
     pthread_join(*p3, NULL);
     
-
 	
 	// terminate the gpio module
 	gpioTerminate();
@@ -121,11 +148,144 @@ int main( int argc, char** argv )
 	// destroy the semaphore
 	sem_destroy(&mutex_gpio);
 	sem_destroy(&mutex_adc);
+	sem_destroy(&sem_buzzer);
+	
+	close(fifofd); 
 	
 	return 0;
 	
 }
 
+
+
+/*
+** sensorFusionAlgorithm
+**
+** Description
+**  Function that executes the sensor fusion algorithm 
+**  for the system
+**
+** Input Arguments:
+**  None
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+void sensorFusionAlgorithm(void)
+{
+	unsigned int counter = 0;
+	unsigned int proximityCounter = 0;
+	unsigned int pressureCounter = 0;
+	int buzzerFlag = 0;
+	int buzzerPressureFlag = 0;
+	char buf[MAX_BUF];
+	
+    
+    //for(int i = 0; i < 5; i++)
+    //{
+		//if (read(fifofd, buf, MAX_BUF) > 0)
+		//{
+			//fprintf(stderr,"FIFO Received: %s\n", buf); 
+		//}
+		//sleep(3);
+	//}
+	//return;
+	
+	
+	while(1)
+	{
+		usleep(2000);
+		
+		// detect approaching object
+		if (DeltaProximity > 130 && buzzerFlag == 0)
+		{
+			sem_post(&sem_buzzer);
+			buzzerFlag = 1;
+			proximityCounter = counter;
+		}
+		else
+		{
+			if ((unsigned int)(counter - proximityCounter) >= 500) // wait for 1 second
+			{
+				buzzerFlag = 0;
+			}
+		}
+		
+		
+		// detect decrease in grip pressure
+		if (Pressure < 60 && buzzerPressureFlag == 0)
+		{
+			sem_post(&sem_buzzer);
+			buzzerPressureFlag = 1;
+			pressureCounter = counter;
+			//fprintf(stderr,"!\n");
+		}
+		else
+		{
+			//fprintf(stderr,"+\n");
+			if ((unsigned int)(counter - pressureCounter) >= 1000) // wait for 2 second
+			{
+				buzzerPressureFlag = 0;
+				//fprintf(stderr,"*\n");
+			}
+		}
+		
+		
+		// check the blink detector for new data
+		if (read(fifofd, buf, MAX_BUF) > 0)
+		{
+			fprintf(stderr,"FIFO Received: %s\n", buf); 
+		}
+		
+		
+		// increase the counter
+		counter++;
+	}	
+}
+
+
+
+/*
+** buzzer_task
+**
+** Description
+**  Task for triggering the buzzer
+**
+** Input Arguments:
+**  arg		string to be printed at task startup
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+void *buzzer_task(void *arg)
+{
+	printf("buzzer: Task Started %s\n", (char *)arg);
+	
+	
+	while(1)
+	{
+		sem_wait(&sem_buzzer);
+		gpioWrite(BUZZER_GPIO_PIN, 1);		// Set gpio high
+		usleep(1000000);
+		gpioWrite(BUZZER_GPIO_PIN, 0);		// Set gpio low
+	}
+	
+	return 0;
+}
 
 
 
