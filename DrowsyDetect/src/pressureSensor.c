@@ -36,7 +36,7 @@ void *pressureSensor_task(void *arg)
 	printf("pressure: Task Started %s\n", (char *)arg);
 	
 	ads1015_t ads;
-	ads1015_init(&ads);
+	ads1015_init(&ads, GENERIC);
 	
 	float voltage = 0;
 	int scaledVoltage = 0;
@@ -97,7 +97,7 @@ void *pressureSensor_task(void *arg)
 			avg = avg / 5;
 			delta = (scaledVoltage - avg);
 			//fprintf(stderr,"d= %d\n", delta );
-			fprintf(stderr,"d= %d\n", scaledVoltage );
+			//fprintf(stderr,"d= %d\n", scaledVoltage );
 			
 			// report to main thread
 			DeltaPressure = delta;

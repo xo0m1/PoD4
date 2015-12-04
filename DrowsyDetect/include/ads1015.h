@@ -34,6 +34,12 @@ typedef struct {
 
 } ads1015_t;
 
+
+typedef enum {
+	GENERIC, 
+	PULSE
+} adcType;
+
 /************************ Function Prototypes *************************/
 
 
@@ -48,7 +54,8 @@ typedef struct {
 **	Failure to do this will have unexpected results.
 **
 ** Input Arguments:
-**  pointer to ads1015_t object.
+**  Pointer to ads1015_t object.
+**	Type of ADC to initialize.
 **
 ** Output Arguments:
 **  None
@@ -60,7 +67,7 @@ typedef struct {
 **  None
 **
 **/
-int ads1015_init(ads1015_t *chip);
+int ads1015_init(ads1015_t *chip, adcType type);
 
 
 

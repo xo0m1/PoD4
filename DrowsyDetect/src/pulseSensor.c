@@ -83,7 +83,7 @@ void *pulseSensor_task(void *arg)
 
 	
 	ads1015_t ads;
-	ads1015_init(&ads);
+	ads1015_init(&ads, PULSE);
 	float sig = 0;
 	
 	while (1)
@@ -171,7 +171,8 @@ void *pulseSensor_task(void *arg)
 					BPM = (int)(60000.0/rtotal);            // how many beats can fit into a minute? that's BPM!
 					QS = 1;                              	// set Quantified Self flag 
 					
-					printf("%d\n", BPM);
+					//printf("%d\n", BPM);
+					printf("%d\n", IBI);
 					// QS FLAG IS NOT CLEARED INSIDE THIS ISR
 				}
 			}                       

@@ -153,7 +153,8 @@ int ads1015_i2cInit(ads1015_t *chip)
 **	Failure to do this will have unexpected results.
 **
 ** Input Arguments:
-**  pointer to ads1015_t object.
+**  Pointer to ads1015_t object.
+**	Type of ADC to initialize.
 **
 ** Output Arguments:
 **  None
@@ -165,7 +166,7 @@ int ads1015_i2cInit(ads1015_t *chip)
 **  None
 **
 **/
-int ads1015_init(ads1015_t *chip)
+int ads1015_init(ads1015_t *chip, adcType type)
 {	
 	/* Initialize the fields in disp */	
 	chip->fd = -1;
@@ -175,6 +176,14 @@ int ads1015_init(ads1015_t *chip)
 	if (ads1015_i2cInit(chip))
 	{	
 		int address = ADS1015_I2C_ADDRESS;
+		
+		// Overwrite the address if the type is PULSE
+		if (type == PULSE)
+		{
+			address = ADS1015_PULSE_I2C_ADDRESS;
+		}
+		
+		
 		
 		/* Let's register our i2c slave address in the system */
 		if (ioctl (chip->fd, I2C_SLAVE, address) < 0 )

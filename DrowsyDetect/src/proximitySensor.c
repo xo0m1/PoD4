@@ -32,7 +32,7 @@ void *proximitySensor_task(void *arg)
 	printf("proximity: Task Started %s\n", (char *)arg);
 	
 	ads1015_t ads;
-	ads1015_init(&ads);
+	ads1015_init(&ads, GENERIC);
 	
 	float voltage = 0;
 	int scaledVoltage = 0;

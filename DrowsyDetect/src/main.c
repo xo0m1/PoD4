@@ -99,8 +99,8 @@ int main( int argc, char** argv )
 	
 
 
-	//p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1 - PULSE SENSOR"); 
-	//sleep(1);
+	p1 = gpioStartThread(pulseSensor_task, (void *)"thread 1 - PULSE SENSOR"); 
+	sleep(1);
 	
 	p4 = gpioStartThread(buzzer_task, (void *)"thread 4 - BUZZER"); 
 	sleep(1);
@@ -136,7 +136,7 @@ int main( int argc, char** argv )
 	
 	
 	// Wait for the threads to terminate
-	//pthread_join(*p1, NULL);
+	pthread_join(*p1, NULL);
 	pthread_join(*p4, NULL);
     pthread_join(*p2, NULL);
     pthread_join(*p3, NULL);
@@ -348,7 +348,7 @@ int testADC(void)
 {
 	
 	ads1015_t adc;
-	int ret = ads1015_init(&adc);
+	int ret = ads1015_init(&adc, GENERIC);
 	if (!ret) 
 	{
 		fprintf(stderr,"ERROR initializing ADC\n");
