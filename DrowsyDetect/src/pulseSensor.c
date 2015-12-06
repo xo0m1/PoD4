@@ -22,6 +22,9 @@ extern sem_t mutex_adc;
 extern sem_t mutex_gpio;
 char retBuf[10];
 
+extern int Pulse_IBI;
+extern char Pulse_newIBIvalue;
+
 
 /********************* LOCAL Function Prototypes **********************/
 int saveToFile(int sample);
@@ -173,6 +176,12 @@ void *pulseSensor_task(void *arg)
 					
 					//printf("%d\n", BPM);
 					printf("%d\n", IBI);
+					
+					// pass the IBI information to the main thread
+					Pulse_IBI = IBI;
+					Pulse_newIBIvalue = 1;
+					
+					
 					// QS FLAG IS NOT CLEARED INSIDE THIS ISR
 				}
 			}                       

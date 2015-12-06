@@ -20,9 +20,22 @@
 #include "../include/pressureSensor.h"
 
 /************************ Macros **************************************/
-#define MAX_BUF 5
+#define MAX_BUF 					5
+#define PULSE_CIRCULAR_BUF_SIZE 	15
 
 //#define BLINKDETECT_PIPE
+
+
+
+/**************************** Data Types ******************************/
+
+
+typedef enum {
+	PRESSURE_IDLE, 
+	PRESSURE_NO_GRIP,
+	PRESSURE_ALERT,
+	PRESSURE_DISABLE_ALERT
+} pressureStatesType;
 
 
 /********************* LOCAL Function Prototypes **********************/
@@ -30,6 +43,7 @@ int testADC(void);
 void exitingFunction(int signo);
 void *buzzer_task(void *arg);
 void sensorFusionAlgorithm(void);
+void pressureStateMachine(int counter);
 
 /*************************** Globals **********************************/
 
@@ -41,6 +55,8 @@ sem_t sem_buzzer;
 volatile int DeltaProximity = 0;
 volatile int DeltaPressure = 0;
 volatile int Pressure = 0;
+volatile int Pulse_IBI = 0;
+volatile char Pulse_newIBIvalue = 0;
 
 
 static pthread_t *p1;
@@ -182,28 +198,27 @@ void sensorFusionAlgorithm(void)
 {
 	unsigned int counter = 0;
 	unsigned int proximityCounter = 0;
-	unsigned int pressureCounter = 0;
 	int buzzerFlag = 0;
-	int buzzerPressureFlag = 0;
 	char buf[MAX_BUF];
+	int pulseIBICircularBuffer[PULSE_CIRCULAR_BUF_SIZE];
+	float pulseIBIAvg = 0;
+	int index = 0;
 	
-    
-    //for(int i = 0; i < 5; i++)
-    //{
-		//if (read(fifofd, buf, MAX_BUF) > 0)
-		//{
-			//fprintf(stderr,"FIFO Received: %s\n", buf); 
-		//}
-		//sleep(3);
-	//}
-	//return;
+	// initialize the pulse circular buffer
+	for(int i=0; i < PULSE_CIRCULAR_BUF_SIZE; i++)
+	{
+		pulseIBICircularBuffer[i] = 400;
+	}
 	
 	
 	while(1)
 	{
 		usleep(2000);
 		
-		// detect approaching object
+		
+		/////////////////////////
+		// Detect approaching object
+		/////////////////////////
 		if (DeltaProximity > 130 && buzzerFlag == 0)
 		{
 			sem_post(&sem_buzzer);
@@ -219,29 +234,49 @@ void sensorFusionAlgorithm(void)
 		}
 		
 		
-		// detect decrease in grip pressure
-		if (Pressure < 60 && buzzerPressureFlag == 0)
-		{
-			sem_post(&sem_buzzer);
-			buzzerPressureFlag = 1;
-			pressureCounter = counter;
-			//fprintf(stderr,"!\n");
-		}
-		else
-		{
-			//fprintf(stderr,"+\n");
-			if ((unsigned int)(counter - pressureCounter) >= 1000) // wait for 2 second
-			{
-				buzzerPressureFlag = 0;
-				//fprintf(stderr,"*\n");
-			}
-		}
-		
-		
-		// check the blink detector for new data
+		/////////////////////////
+		// Execute the pressure sensor state machine to detect pressure events
+		/////////////////////////
+		pressureStateMachine(counter);
+	
+	
+	
+		/////////////////////////
+		// Check the blink detector for new data
+		/////////////////////////
 		if (read(fifofd, buf, MAX_BUF) > 0)
 		{
 			fprintf(stderr,"FIFO Received: %s\n", buf); 
+		}
+		
+		
+		
+		/////////////////////////
+		//  Check the IBI of the pulse sensor
+		/////////////////////////
+		if (Pulse_newIBIvalue)
+		{
+			// reset the flag
+			Pulse_newIBIvalue = 0;
+			pulseIBIAvg = 0.0;
+			
+			for(int i=0; i < PULSE_CIRCULAR_BUF_SIZE; i++)
+			{
+				pulseIBIAvg = pulseIBIAvg + (float)pulseIBICircularBuffer[i];
+			}
+			pulseIBIAvg = pulseIBIAvg / (float)PULSE_CIRCULAR_BUF_SIZE;
+			if (Pulse_IBI < (int)(pulseIBIAvg - 100))
+			{
+				// IBI is less than average IBI
+				
+			} 
+			pulseIBICircularBuffer[index++] = Pulse_IBI;
+			if (index >= MAX_BUF)
+			{
+				index = 0;
+			}
+			fprintf(stderr,"IBI: %d\n", Pulse_IBI); 
+			fprintf(stderr,"IBI avg: %d\n", (int)pulseIBIAvg); 
 		}
 		
 		
@@ -286,6 +321,127 @@ void *buzzer_task(void *arg)
 	
 	return 0;
 }
+
+
+
+
+
+/*
+** pressureStateMachine
+**
+** Description
+**  Function that implements the state machine for detecting
+**  pressure sensor events. The state machine will detect a low
+**  or no grip on the pressure sensor for at least 3 seconds and
+**  alert the user. 
+**
+** Input Arguments:
+**  counter		running counter of 2ms periods elapsed
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+void pressureStateMachine(int counter)
+{
+	
+	static pressureStatesType pressureState = PRESSURE_IDLE;
+	static unsigned int pressureCounter = 0;
+	//static int buzzerPressureFlag = 0;
+	
+	switch(pressureState)
+	{
+		case PRESSURE_IDLE:
+		
+			if (Pressure < 60 )
+			{
+				// low or no grip detected -- let's take a closer look
+				pressureState = PRESSURE_NO_GRIP;
+				pressureCounter = counter;
+			}
+			else
+			{
+				// Everything normal
+				pressureState = PRESSURE_IDLE;
+			}
+			break;
+			
+		case PRESSURE_NO_GRIP:	
+		
+			if (Pressure < 60 )
+			{
+				// Still no grip detected
+				if ((unsigned int)(counter - pressureCounter) >= 1500)  // wait for 3 seconds
+				{
+					// low or no grip detected for more than 5 seconds -- alert the user!
+					pressureState = PRESSURE_ALERT;	
+				}
+				else
+				{
+					pressureState = PRESSURE_NO_GRIP;
+				}
+			}
+			else
+			{
+				// grip detected - break
+				pressureState = PRESSURE_IDLE;
+			}
+			break;
+			
+		case PRESSURE_ALERT:
+		
+			// alert the user -- pressure event
+			sem_post(&sem_buzzer);
+			//buzzerPressureFlag = 1;
+			pressureCounter = counter;
+			pressureState = PRESSURE_DISABLE_ALERT;
+			break;
+			
+		case PRESSURE_DISABLE_ALERT:
+
+			if ((unsigned int)(counter - pressureCounter) >= 1000) // wait for 2 seconds
+			{
+				// done waiting -- we can listen for pressure events again
+				//buzzerPressureFlag = 0;
+				pressureState = PRESSURE_IDLE;
+			}
+			else
+			{
+				// continue ignoring pressure events
+				pressureState = PRESSURE_DISABLE_ALERT;
+			}
+			break;
+			
+		default:
+			fprintf(stderr,"drowsyDetect Main - ERROR - Unknown PRESSURE state!\n"); 
+			pressureState = PRESSURE_IDLE;
+			break;
+	}
+	
+		//// detect decrease in grip pressure
+		//if (Pressure < 60 && buzzerPressureFlag == 0)
+		//{
+			//sem_post(&sem_buzzer);
+			//buzzerPressureFlag = 1;
+			//pressureCounter = counter;
+			////fprintf(stderr,"!\n");
+		//}
+		//else
+		//{
+			////fprintf(stderr,"+\n");
+			//if ((unsigned int)(counter - pressureCounter) >= 1000) // wait for 2 second
+			//{
+				//buzzerPressureFlag = 0;
+				////fprintf(stderr,"*\n");
+			//}
+		//}
+}	
 
 
 
