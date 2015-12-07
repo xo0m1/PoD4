@@ -38,13 +38,16 @@
 
 void trackEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect);
 double detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect);
-double findEyes(cv::Mat frame_gray, cv::Rect face) ;
+double findEyes_contours(cv::Mat frame_gray, cv::Rect face);
+bool findEyes_classifier(cv::Mat frame_gray, cv::Rect face);
+bool findEyes_hybrid(cv::Mat frame_gray, cv::Rect face);
 
 /*************************** Globals **********************************/
 
 
 cv::CascadeClassifier face_cascade;
 cv::CascadeClassifier eye_cascade;
+cv::CascadeClassifier eye_cascade_EYE;
 
 
 // Debugging
@@ -113,17 +116,21 @@ int blinkDetect_task()
 	cout << "blinkdetect: Task Started " << endl;
 	
 	
-	int fd;
+	int fd = -1;
     char myfifo[] = "/tmp/blinkDfifo";
-
+/*
+cout << "blinkdetect: opening pipe 1" << endl;
     // create the FIFO (named pipe) 
     mkfifo(myfifo, 0666);
-
-    // write "Hi" to the FIFO 
+cout << "blinkdetect: opening pipe 2" << endl;
+    // open the named pipe as write only
     fd = open(myfifo, O_WRONLY);
-    
+ cout << "blinkdetect: opening pipe 3" << endl;   
     char buffer[5];
+ */   
     
+#if 0    
+	cout << "blinkdetect: testing FIFO " << endl;
     for(int i = 0; i < 5; i++)
     {
 		snprintf(buffer,5, "%2d", i+2);
@@ -132,15 +139,20 @@ int blinkDetect_task()
 		sleep(2);
 	}
 	
-	
-    
-	
-#if 0	
+#else	
+
+	cout << "blinkdetect: loading cascade classifiers " << endl;
+
 	// Load the cascade classifiers
 	// Make sure you point the XML files to the right path, or 
 	// just copy the files from [OPENCV_DIR]/data/haarcascades directory
 	face_cascade.load("xml/haarcascade_frontalface_alt2.xml");
-	eye_cascade.load("xml/haarcascade_eye.xml");
+	
+	//eye_cascade.load("xml/haarcascade_eye.xml");
+	eye_cascade_EYE.load("/usr/local/share/OpenCV/haarcascades/haarcascade_eye.xml");
+	//eye_cascade.load("/usr/local/share/OpenCV/haarcascades/haarcascade_lefteye_2splits.xml");
+	eye_cascade.load("/usr/local/share/OpenCV/haarcascades/haarcascade_righteye_2splits.xml");
+	
 	
 	
 	
@@ -150,16 +162,16 @@ int blinkDetect_task()
     Camera.set( CV_CAP_PROP_FORMAT, CV_8UC1 );   
     
     
-    cout<<"Opening Camera..."<<endl;
+    cout<<"blinkdetect: Opening Camera..."<<endl;
     int cam_open = Camera.open();
     if (!cam_open) 
     {
-		cerr<<"Error opening the camera"<<endl;
+		cerr<<"blinkdetect: Error opening the camera"<<endl;
 		return 0;
 	}
-	if (face_cascade.empty() || eye_cascade.empty())
+	if (face_cascade.empty() || eye_cascade.empty() || eye_cascade_EYE.empty())
 	{
-		cerr<< "Error in template load." << endl;
+		cerr<< "blinkdetect: Error in template load." << endl;
 		return 0;
 	}
     
@@ -172,22 +184,15 @@ int blinkDetect_task()
     //Camera.set(CV_CAP_PROP_WHITE_BALANCE_RED_V, 50); //values range from 0 to 100, -1 auto whitebalance
     //Camera.set(CV_CAP_PROP_WHITE_BALANCE_BLUE_U, 50); //values range from 0 to 100,  -1 auto whitebalance
 
-
-	//cv::Mat frame;
 	cv::Mat eye_tpl;
 	cv::Rect eye_bb;
 	
-	//Size size(640,480);
 	Size size(320,240);
 	cv::Mat image;
-	//int counter = 0;
+
 	
-	cout << "Let's begin!" << endl;
+	cout << "blinkdetect: Let's begin!" << endl;
 	
-	//const int bufferSize = 5; 
-	//double sumBuffer[BUFFER_SIZE];
-	double sum = 0;
-	//int index = 0;
 
 	while (cv::waitKey(15) != 'q')
 	{
@@ -196,48 +201,22 @@ int blinkDetect_task()
 		Camera.retrieve (image_cam);
 		if (image_cam.empty())
 		{
-			cout << "no image read from camera -- terminating" << endl;
+			cout << "blinkdetect: ERROR -- No image read from camera -- terminating" << endl;
 			break;
 		}
 			
 		// Resizing the image to a smaller size
 		resize(image_cam, image, size); 
-		
 
 		// Convert to grayscale and 
 		// adjust the image contrast using histogram equalization
 		cv::Mat gray;
 		//cv::cvtColor(image, gray, CV_BGR2GRAY);
 		cv::equalizeHist(image, gray);
-		
-		
 				
 		// Find the eyes
-		sum = detectEye(gray, eye_tpl, eye_bb);	
-		
-		/*
-		double avg = 0;
-		for(int j = 0; j < BUFFER_SIZE; j++)
-		{
-			avg += sumBuffer[j];
-		}
-		avg = avg / BUFFER_SIZE;
-		
-		
-		
-		if (sum >= (avg * 1.13) || sum <= (avg * 0.87))		
-		{
-			cout << "blink!!" << endl;
-		}
-		else
-		{
-			sumBuffer[index++] = sum;
-		}
-		
-		
-		if (index == BUFFER_SIZE) { index = 0;}		
-			*/
-		
+		detectEye(gray, eye_tpl, eye_bb);	
+	
 	}
 #endif	
 	// close
@@ -277,14 +256,24 @@ int blinkDetect_task()
 **/
 double detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 {
+	bool ret1 = false, ret2 = false;
+	static int counter = 1;
 	double sum = 0;	
-	std::vector<cv::Rect> faces, eyes;
+	std::vector<cv::Rect> faces;
 	face_cascade.detectMultiScale(im, faces, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE, cv::Size(30,30));
 
-	for (unsigned int i = 0; i < faces.size(); i++)
+	// Find the face first, then look for the eyes
+	//for (unsigned int i = 0; i < faces.size(); i++)
+	if (faces.size() > 0)
 	{
-		//cv::Mat face = im(faces[i]);			
-		sum = findEyes(im, faces[i]);			
+		//sum = findEyes_contours(im, faces[0]);
+		ret1 = findEyes_classifier(im, faces[0]);	
+		ret2 = findEyes_hybrid(im, faces[0]);	
+		
+		if (ret1 == true && ret2 == false)
+		{
+			cerr << "blink # " << counter++ << endl;
+		}
 	}
 
 	return sum;
@@ -295,7 +284,7 @@ double detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 
 
 /*
-** findEyes
+** findEyes_contours
 **
 ** Description
 **  Find eyes based on a face image. Code based on code from:
@@ -317,7 +306,7 @@ double detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 **  None
 **
 **/
-double findEyes(cv::Mat frame_gray, cv::Rect face) 
+double findEyes_contours(cv::Mat frame_gray, cv::Rect face) 
 {
 	cv::Mat faceROI = frame_gray(face);
 	cv::Mat debugFace = faceROI;
@@ -336,12 +325,271 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	int eye_region_top = face.height * (kEyePercentTop/100.0);
 	cv::Rect leftEyeRegion(face.width*(kEyePercentSide/100.0),
 						 eye_region_top,eye_region_width,eye_region_height);
-	cv::Rect rightEyeRegion(face.width - eye_region_width - face.width*(kEyePercentSide/100.0),
-						  eye_region_top,eye_region_width,eye_region_height);
+						 
+	//cv::Rect rightEyeRegion(face.width - eye_region_width - face.width*(kEyePercentSide/100.0),eye_region_top,eye_region_width,eye_region_height);
 	
 	//cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
 	
 	cv::Mat eyeL = faceROI(leftEyeRegion);
+	//cv::imshow("Left Eye", eyeL);	
+	
+	cv::Mat eyeBin, eyeSmooth;
+	cv::GaussianBlur(faceROI(leftEyeRegion),eyeSmooth,cv::Size(5,5),1.5);	
+	cv::threshold(eyeSmooth, eyeBin, 67, 255, CV_THRESH_BINARY);
+	
+	
+	std::vector<std::vector<cv::Point> > contours;
+	cv::Mat contourOutput = eyeBin.clone();
+	cv::findContours( contourOutput, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+
+    //Draw the contours
+    //cv::Mat contourImage(eyeBin.size(), CV_8UC1, cv::Scalar(0,0,0));
+    cv::Mat contourImage = eyeL.clone();
+    cv::Scalar colors[3];
+    colors[0] = cv::Scalar(255, 0, 0);
+    colors[1] = cv::Scalar(0, 255, 0);
+    colors[2] = cv::Scalar(0, 0, 255);
+    for (size_t idx = 0; idx < contours.size(); idx++) 
+    {
+        cv::drawContours(contourImage, contours, idx, colors[idx % 3]);
+    }
+	cv::imshow("Contours", contourImage);		
+	
+	// Get contours info
+	//cout << "# of contour points: " << contours[0].size() << endl ;
+	//cout << " Area: " << contourArea(contours[0]) << endl;
+
+	
+	static int count = 1;
+	static bool prev_blink = false;
+	if (contourArea(contours[0]) > 500 && prev_blink == false)
+	{
+		cout << "blink # " << count++ << endl;
+		prev_blink = true;
+	}
+	else
+	{
+		prev_blink = false;
+	}
+	
+	
+	return 1; 
+}
+
+
+
+
+
+
+
+/*
+** findEyes_classifier
+**
+** Description
+**  Find eyes based on a face image using cascade classifiers for eyes
+**
+** Input Arguments:
+**  frame_gray    	grayscale image from the camera
+**  Rect			rectangle indicating location of face
+**  
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  1
+**
+** Special Considerations:
+**  None
+**
+**/
+bool findEyes_classifier(cv::Mat frame_gray, cv::Rect face) 
+{
+	bool eyeDetected = false;
+	
+	cv::Mat faceROI = frame_gray(face);
+	//cv::imshow("face", faceROI);	
+
+	
+	std::vector<cv::Rect> eyes;
+	try
+	{
+		eye_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE); //, cv::Size(5,5));
+		if (eyes.size() > 0)
+		{
+			//cv::Mat eyeDetected = faceROI(eyes[0]);
+			//cv::imshow("Left Eye", eyeDetected);
+			//cv::waitKey(5);
+			eyeDetected = true;
+		}
+		else
+		{
+			eyeDetected = false;
+		}
+	}
+	catch( cv::Exception& e )
+	{
+		const char* err_msg = e.what();
+		std::cout << "exception caught: " << err_msg << std::endl;
+	}
+	
+	return eyeDetected;
+}
+
+
+
+
+/*
+** findEyes_hybrid
+**
+** Description
+**  Find eyes based on a face image using cascade classifiers and
+**  relative measurements for eyes
+**
+** Input Arguments:
+**  frame_gray    	grayscale image from the camera
+**  Rect			rectangle indicating location of face
+**  
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  1
+**
+** Special Considerations:
+**  None
+**
+**/
+bool findEyes_hybrid(cv::Mat frame_gray, cv::Rect face) 
+{
+	
+	// Size constants
+	static const int eyeTop = 25;
+	static const int eyeSide = 13;
+	static const int eyeHeight = 30;
+	static const int eyeWidth = 35;
+	bool eyeDetected = false;
+	cv::Mat faceROI = frame_gray(face);
+	
+	
+	//-- Find eye regions and draw them
+	int eye_region_width = face.width * (eyeWidth/100.0);
+	int eye_region_height = face.width * (eyeHeight/100.0);
+	int eye_region_top = face.height * (eyeTop/100.0);
+	
+	cv::Rect leftEyeRegion(face.width*(eyeSide/100.0),eye_region_top,eye_region_width,eye_region_height);
+	//cv::Rect rightEyeRegion(face.width - eye_region_width - face.width*(eyeSide/100.0),eye_region_top,eye_region_width,eye_region_height);
+	
+	cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
+	
+	cv::Mat eyeL = faceROI(leftEyeRegion);
+	//cv::imshow("Left Eye", eyeL);	
+
+	std::vector<cv::Rect> eyes;
+	try
+	{
+		eye_cascade_EYE.detectMultiScale(eyeL, eyes, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE); //, cv::Size(5,5));
+		if (eyes.size() > 0)
+		{
+			//cv::Mat eyeDetected = eyeL(eyes[0]);
+			//cv::imshow("Left Eye", eyeDetected);
+			//cerr << "size: "<< eyeDetected.size() << endl;
+			eyeDetected = true;
+		}
+		else
+		{
+			eyeDetected = false;
+		}
+	}
+	catch( cv::Exception& e )
+	{
+		const char* err_msg = e.what();
+		std::cout << "exception caught: " << err_msg << std::endl;
+	}
+	
+	return eyeDetected;
+}
+
+
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+
+
+/*
+** findEyes_ORIGINAL
+**
+** Description
+**  Find eyes based on a face image. Code based on code from:
+**       http://thume.ca/projects/2012/11/04/simple-accurate-eye-center-tracking-in-opencv/,
+**       https://github.com/trishume/eyeLike/blob/master/src/main.cpp
+**
+** Input Arguments:
+**  frame_gray    	grayscale image from the camera
+**  Rect			rectangle indicating location of face
+**  
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  1
+**
+** Special Considerations:
+**  None
+**
+**/
+double findEyes_ORIGINAL(cv::Mat frame_gray, cv::Rect face) 
+{
+	cv::Mat faceROI = frame_gray(face);
+	cv::Mat debugFace = faceROI;
+	
+	/*
+	if (kSmoothFaceImage) {
+	double sigma = kSmoothFaceFactor * face.width;
+	GaussianBlur( faceROI, faceROI, cv::Size( 0, 0 ), sigma);
+	}
+	* */
+	
+	
+	//-- Find eye regions and draw them
+	int eye_region_width = face.width * (kEyePercentWidth/100.0);
+	int eye_region_height = face.width * (kEyePercentHeight/100.0);
+	int eye_region_top = face.height * (kEyePercentTop/100.0);
+	cv::Rect leftEyeRegion(face.width*(kEyePercentSide/100.0),
+						 eye_region_top,eye_region_width,eye_region_height);
+						 
+	//cv::Rect rightEyeRegion(face.width - eye_region_width - face.width*(kEyePercentSide/100.0),
+	//					  eye_region_top,eye_region_width,eye_region_height);
+	
+	//cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
+	
+	cv::Mat eyeL = faceROI(leftEyeRegion);
+	//cv::imshow("Left Eye", eyeL);	
+
+	
+	std::vector<cv::Rect> eyes;
+	try
+	{
+		eye_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE); //, cv::Size(5,5));
+		if (eyes.size() > 0)
+		{
+			cv::Mat eyeDetected = faceROI(eyes[0]);
+			cv::imshow("Left Eye", eyeDetected);
+			//cv::waitKey(5);
+		}
+	}
+	catch( cv::Exception& e )
+	{
+		const char* err_msg = e.what();
+		std::cout << "exception caught: " << err_msg << std::endl;
+	}
+	
+	return 1;
+//////////////////////////////////////////////////	
+	
+	
 	
 	cv::Mat eyeBin, eyeSmooth;
 	cv::GaussianBlur(faceROI(leftEyeRegion),eyeSmooth,cv::Size(5,5),1.5);	
@@ -359,6 +607,8 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	cv::Mat contourOutput = eyeBin.clone();
 	cv::findContours( contourOutput, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
 
+
+
     //Draw the contours
     cv::Mat contourImage(eyeBin.size(), CV_8UC1, cv::Scalar(0,0,0));
     cv::Scalar colors[3];
@@ -369,7 +619,7 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
     {
         cv::drawContours(contourImage, contours, idx, colors[idx % 3]);
     }
-	cv::imshow("Contours", contourImage);	
+	//cv::imshow("Contours", contourImage);	
 	
 	
 	// Get contours info
@@ -479,8 +729,6 @@ double findEyes(cv::Mat frame_gray, cv::Rect face)
 	//  cv::Mat destinationROI = debugImage( roi );
 	//  faceROI.copyTo( destinationROI );
 }
-
-
 
 
 
