@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 
 
@@ -49,6 +50,10 @@ cv::CascadeClassifier face_cascade;
 cv::CascadeClassifier eye_cascade;
 cv::CascadeClassifier eye_cascade_EYE;
 
+
+// named pipe variables
+static int fd_fifo = -1;
+static const char myfifo[] = "/tmp/blinkDfifo";
 
 // Debugging
 static const bool kPlotVectorField = false;
@@ -116,26 +121,32 @@ int blinkDetect_task()
 	cout << "blinkdetect: Task Started " << endl;
 	
 	
-	int fd = -1;
-    char myfifo[] = "/tmp/blinkDfifo";
-/*
-cout << "blinkdetect: opening pipe 1" << endl;
+	int ret = system("echo \"24\" > /sys/class/gpio/export");
+	ret = system("echo \"out\" > /sys/class/gpio/gpio24/direction");
+	ret = system("echo \"out\" > /sys/class/gpio/gpio24/direction");
+	
+	
+	
+
+//cout << "blinkdetect: opening pipe 1" << endl;
     // create the FIFO (named pipe) 
     mkfifo(myfifo, 0666);
-cout << "blinkdetect: opening pipe 2" << endl;
+//cout << "blinkdetect: opening pipe 2" << endl;
     // open the named pipe as write only
-    fd = open(myfifo, O_WRONLY);
- cout << "blinkdetect: opening pipe 3" << endl;   
-    char buffer[5];
- */   
+    fd_fifo = open(myfifo, O_WRONLY);
+    //fd_fifo = open(myfifo, O_RDWR);
+ //cout << "blinkdetect: opening pipe 3" << endl;   
     
-#if 0    
+   
+    
+#if 0   
+	char buffer[5]; 
 	cout << "blinkdetect: testing FIFO " << endl;
     for(int i = 0; i < 5; i++)
     {
 		snprintf(buffer,5, "%2d", i+2);
-		write(fd, buffer, sizeof(buffer));
-		//fprintf(fd, "%2d", i+1);
+		write(fd_fifo, buffer, sizeof(buffer));
+		//fprintf(fd_fifo, "%2d", i+1);
 		sleep(2);
 	}
 	
@@ -214,13 +225,16 @@ cout << "blinkdetect: opening pipe 2" << endl;
 		//cv::cvtColor(image, gray, CV_BGR2GRAY);
 		cv::equalizeHist(image, gray);
 				
+		
+		system("echo \"0\" > /sys/class/gpio/gpio24/value");
+				
 		// Find the eyes
 		detectEye(gray, eye_tpl, eye_bb);	
 	
 	}
 #endif	
 	// close
-	close(fd);
+	close(fd_fifo);
 	
 	// remove the FIFO 
     unlink(myfifo);
@@ -272,7 +286,10 @@ double detectEye(cv::Mat& im, cv::Mat& tpl, cv::Rect& rect)
 		
 		if (ret1 == true && ret2 == false)
 		{
-			cerr << "blink # " << counter++ << endl;
+			//cerr << "blink # " << counter << endl;
+			system("echo \"1\" > /sys/class/gpio/gpio24/value");
+			write(fd_fifo, (void *)&counter, sizeof(counter));
+			counter++;
 		}
 	}
 
@@ -483,7 +500,13 @@ bool findEyes_hybrid(cv::Mat frame_gray, cv::Rect face)
 	
 	cv::rectangle(faceROI, leftEyeRegion, CV_RGB(0,255,0));
 	
-	cv::Mat eyeL = faceROI(leftEyeRegion);
+	//cv::Mat eyeL = faceROI(leftEyeRegion);
+	
+	// Equalize the image before running the classifier
+	cv::Mat eyeL;
+	cv::equalizeHist(faceROI(leftEyeRegion), eyeL);
+	
+	// Display the eye
 	//cv::imshow("Left Eye", eyeL);	
 
 	std::vector<cv::Rect> eyes;

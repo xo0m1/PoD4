@@ -23,7 +23,7 @@
 #define MAX_BUF 					5
 #define PULSE_CIRCULAR_BUF_SIZE 	15
 
-//#define BLINKDETECT_PIPE
+#define BLINKDETECT_PIPE
 
 
 
@@ -198,8 +198,13 @@ void sensorFusionAlgorithm(void)
 {
 	unsigned int counter = 0;
 	unsigned int proximityCounter = 0;
+	unsigned int blinkCountPrev = 0;
+	unsigned int blinkDeltaHistory[5] = {0,0,0,0,0};
+	//float blinkAvg = 0;
+	unsigned int blinkTimeoutCounter = 0;
+	unsigned int blinkbuzzerFlag = 0;
 	int buzzerFlag = 0;
-	char buf[MAX_BUF];
+	int fifo_return_val = 0;
 	int pulseIBICircularBuffer[PULSE_CIRCULAR_BUF_SIZE];
 	float pulseIBIAvg = 0;
 	int index = 0;
@@ -244,9 +249,45 @@ void sensorFusionAlgorithm(void)
 		/////////////////////////
 		// Check the blink detector for new data
 		/////////////////////////
-		if (read(fifofd, buf, MAX_BUF) > 0)
+		if (read(fifofd, (void *)&fifo_return_val, sizeof(int)) > 0)
 		{
-			fprintf(stderr,"FIFO Received: %s\n", buf); 
+			//blinkAvg = 0;
+			//fprintf(stderr,"FIFO Received: %d\n", fifo_return_val); 
+			
+			// shift the values
+			for(int i = 0; i < 4; i++)
+			{
+				blinkDeltaHistory[i] = blinkDeltaHistory[i+1];
+				//blinkAvg += blinkDeltaHistory[i];
+			}
+			blinkDeltaHistory[4] = (counter - blinkCountPrev );
+			
+			//blinkAvg = blinkAvg / 4;
+			
+			fprintf(stderr,"D blink: %d\n", (counter - blinkCountPrev )); 
+			
+			// save the current counter value
+			blinkCountPrev = counter;
+			
+			
+			//if (blinkDeltaHistory[3] < 200 &&  blinkDeltaHistory[4] < 200)
+			//if (blinkDeltaHistory[4] < ((int)(blinkAvg * 0.7))
+			if (blinkDeltaHistory[4] < 150 && blinkbuzzerFlag == 0)
+			{
+				//buzzer
+				sem_post(&sem_buzzer);
+				blinkbuzzerFlag = 1;
+				blinkTimeoutCounter = counter;
+			}
+			else
+			{
+				if ((unsigned int)(counter - blinkTimeoutCounter) >= 500) // wait for 1 second
+				{
+					blinkbuzzerFlag = 0;
+				}
+			}
+			
+			
 		}
 		
 		
