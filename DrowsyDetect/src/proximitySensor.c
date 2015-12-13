@@ -19,6 +19,7 @@ extern sem_t mutex_adc;
 extern sem_t mutex_gpio;
 
 extern int DeltaProximity;
+extern int Proximity;
 
 /********************* LOCAL Function Prototypes **********************/
 static long map(long x, long in_min, long in_max, long out_min, long out_max);
@@ -96,6 +97,7 @@ void *proximitySensor_task(void *arg)
 			
 			// report to main thread
 			DeltaProximity = delta;
+			Proximity = scaledVoltage;
 			
 			// Put current value into the averaging window
 			window[index++] = scaledVoltage;

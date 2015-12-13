@@ -38,25 +38,39 @@ typedef enum {
 } pressureStatesType;
 
 
+typedef struct 
+{
+ int deltaProximity;
+ int pressure;
+ int blinkDelta;
+ int pulseIBI;
+} sensorDataType;
+
+
 /********************* LOCAL Function Prototypes **********************/
 int testADC(void);
 void exitingFunction(int signo);
 void *buzzer_task(void *arg);
 void sensorFusionAlgorithm(void);
 void pressureStateMachine(int counter);
+void fuseSensorData(int *blinkDeltaHistory, char newBlinkData, unsigned int counter);
 
 /*************************** Globals **********************************/
 
 sem_t mutex_adc;
 sem_t mutex_gpio;
 sem_t sem_buzzer;
+char BuzzerONFlag = 0;
 
 
 volatile int DeltaProximity = 0;
+volatile int Proximity = 0;
 volatile int DeltaPressure = 0;
 volatile int Pressure = 0;
 volatile int Pulse_IBI = 0;
 volatile char Pulse_newIBIvalue = 0;
+
+//sensorDataType SensorData;
 
 
 static pthread_t *p1;
@@ -108,6 +122,10 @@ int main( int argc, char** argv )
 	
 	// reset the gpio state of the buzzer
 	gpioWrite(BUZZER_GPIO_PIN, 0);		// Set gpio low
+	gpioWrite(PULSE_SENSOR_GPIO_PIN, 0);		// Set gpio low
+	gpioWrite(PRESSURE_SENSOR_GPIO_PIN, 0);		// Set gpio low
+	gpioWrite(PROXIMITY_SENSOR_GPIO_PIN, 0);		// Set gpio low
+	
 	
 	
 	// Register a function to be called when SIGINT occurs
@@ -208,12 +226,21 @@ void sensorFusionAlgorithm(void)
 	int pulseIBICircularBuffer[PULSE_CIRCULAR_BUF_SIZE];
 	float pulseIBIAvg = 0;
 	int index = 0;
+	char newBlinkData = 0;
 	
 	// initialize the pulse circular buffer
 	for(int i=0; i < PULSE_CIRCULAR_BUF_SIZE; i++)
 	{
 		pulseIBICircularBuffer[i] = 400;
 	}
+	
+	// Initialize the sensor data structure
+	/*
+	SensorData.deltaProximity = 0;
+	SensorData.pressure = 0;
+	SensorData.blinkDelta = 0;
+	SensorData.pulseIBI = 0;
+	*/
 	
 	
 	while(1)
@@ -229,6 +256,7 @@ void sensorFusionAlgorithm(void)
 			sem_post(&sem_buzzer);
 			buzzerFlag = 1;
 			proximityCounter = counter;
+			fprintf(stderr,"Prox Event!\n"); 
 		}
 		else
 		{
@@ -237,6 +265,7 @@ void sensorFusionAlgorithm(void)
 				buzzerFlag = 0;
 			}
 		}
+		
 		
 		
 		/////////////////////////
@@ -251,6 +280,8 @@ void sensorFusionAlgorithm(void)
 		/////////////////////////
 		if (read(fifofd, (void *)&fifo_return_val, sizeof(int)) > 0)
 		{
+			newBlinkData = 1;
+			
 			//blinkAvg = 0;
 			//fprintf(stderr,"FIFO Received: %d\n", fifo_return_val); 
 			
@@ -272,12 +303,13 @@ void sensorFusionAlgorithm(void)
 			
 			//if (blinkDeltaHistory[3] < 200 &&  blinkDeltaHistory[4] < 200)
 			//if (blinkDeltaHistory[4] < ((int)(blinkAvg * 0.7))
-			if (blinkDeltaHistory[4] < 150 && blinkbuzzerFlag == 0)
+			if (blinkDeltaHistory[4] < 160 && blinkbuzzerFlag == 0)
 			{
 				//buzzer
 				sem_post(&sem_buzzer);
 				blinkbuzzerFlag = 1;
 				blinkTimeoutCounter = counter;
+				fprintf(stderr,"Blink Event!\n"); 
 			}
 			else
 			{
@@ -286,8 +318,11 @@ void sensorFusionAlgorithm(void)
 					blinkbuzzerFlag = 0;
 				}
 			}
-			
-			
+		}
+		else
+		{
+			// no new blink detection data
+			newBlinkData = 0;
 		}
 		
 		
@@ -316,9 +351,15 @@ void sensorFusionAlgorithm(void)
 			{
 				index = 0;
 			}
-			fprintf(stderr,"IBI: %d\n", Pulse_IBI); 
-			fprintf(stderr,"IBI avg: %d\n", (int)pulseIBIAvg); 
+			//fprintf(stderr,"IBI: %d\n", Pulse_IBI); 
+			//fprintf(stderr,"IBI avg: %d\n", (int)pulseIBIAvg); 
 		}
+		
+		
+		/////////////////////////
+		//  Fuse sensor data
+		/////////////////////////
+		fuseSensorData((int *)blinkDeltaHistory, newBlinkData, counter);
 		
 		
 		// increase the counter
@@ -355,9 +396,11 @@ void *buzzer_task(void *arg)
 	while(1)
 	{
 		sem_wait(&sem_buzzer);
+		BuzzerONFlag = 1;
 		gpioWrite(BUZZER_GPIO_PIN, 1);		// Set gpio high
 		usleep(1000000);
 		gpioWrite(BUZZER_GPIO_PIN, 0);		// Set gpio low
+		BuzzerONFlag = 0;
 	}
 	
 	return 0;
@@ -365,6 +408,105 @@ void *buzzer_task(void *arg)
 
 
 
+
+/*
+** fuseSensorData
+**
+** Description
+**  Combines sensor data to produce an event 
+**
+** Input Arguments:
+**  
+**
+** Output Arguments:
+**  None
+**
+** Function Return:
+**  None
+**
+** Special Considerations:
+**  None
+**
+**/
+void fuseSensorData(int *blinkDeltaHistory, char newBlinkData, unsigned int counter)
+{
+	char eventFlag = 0;
+	char fuseSensorWaitFlag = 0;
+	unsigned int fuseSensorCounter = 0;
+	
+	
+	// blink delta 850 to 890 msec is normal for driving, if blink 
+	// delta is lower alert!!! -- 150ms is eyes closed (condition 
+	// in main loop)
+	
+	const int blinkTHRESHOLD = 500;
+	const int proximityTHRESHOLD = 180; // length of a car is 4.45 meter avg. [15 m - 4.45m = 10.5 m]. 255 (max val) * 0.7 (10.5m of 15m) = 178.5
+	const int pressureTHRESHOLD = 85;   // 85 = 1/3 of max value (255)
+	const int pulseTHRESHOLD = 500;  // typical IBI is ...
+	
+	// If there is a high priority event taking place do not execute this function
+	if (BuzzerONFlag == 1)
+	{
+		return;
+	}
+	
+	
+	// blink & proximity
+	if (blinkDeltaHistory[4] < blinkTHRESHOLD && Proximity > proximityTHRESHOLD && newBlinkData == 1)
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Blink & Prox Event!\n"); 
+	}
+	// blink & low grip
+	else if (blinkDeltaHistory[4] < blinkTHRESHOLD && Pressure < pressureTHRESHOLD && newBlinkData == 1)
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Blink & Press Event!\n"); 
+	}
+	// proximity & low grip
+	else if (Proximity > proximityTHRESHOLD && Pressure < pressureTHRESHOLD )
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Prox & Press Event!\n"); 
+	}
+	// blink & low heart rate	
+	/*else if (blinkDeltaHistory[4] < blinkTHRESHOLD && Pulse_IBI > pulseTHRESHOLD && newBlinkData == 1)
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Blink & Heart Event!\n"); 
+	}
+	// proximity & low heart rate	
+	else if (Proximity > proximityTHRESHOLD && Pulse_IBI > pulseTHRESHOLD )
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Prox & Heart Event!\n"); 
+	}
+	// low grip & low heart rate	
+	else if (Pressure < pressureTHRESHOLD  && Pulse_IBI > pulseTHRESHOLD )
+	{
+		eventFlag = 1;
+		fprintf(stderr,"Press & Heart Event!\n"); 
+	}
+	*/
+	
+	// If one of the conditions was met, ALERT the user
+	if (eventFlag == 1 && fuseSensorWaitFlag == 0)
+	{
+		//buzzer
+		sem_post(&sem_buzzer);
+		fuseSensorCounter = counter;
+		fuseSensorWaitFlag = 1;
+	}
+	else
+	{
+		if ((unsigned int)(counter - fuseSensorCounter) >= 1500) // wait for 3 second
+		{
+			fuseSensorWaitFlag = 0;
+		}
+	}
+	
+	
+}
 
 
 /*
@@ -442,6 +584,7 @@ void pressureStateMachine(int counter)
 			//buzzerPressureFlag = 1;
 			pressureCounter = counter;
 			pressureState = PRESSURE_DISABLE_ALERT;
+			fprintf(stderr,"Pressure Event!\n"); 
 			break;
 			
 		case PRESSURE_DISABLE_ALERT:

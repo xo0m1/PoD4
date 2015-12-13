@@ -174,8 +174,8 @@ void *pulseSensor_task(void *arg)
 					BPM = (int)(60000.0/rtotal);            // how many beats can fit into a minute? that's BPM!
 					QS = 1;                              	// set Quantified Self flag 
 					
-					//printf("%d\n", BPM);
-					printf("%d\n", IBI);
+					//printf("BPM: %d\n", BPM);
+					//printf("IBI: %d\n", IBI);
 					
 					// pass the IBI information to the main thread
 					Pulse_IBI = IBI;
