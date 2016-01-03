@@ -336,6 +336,8 @@ void sensorFusionAlgorithm(void)
 			Pulse_newIBIvalue = 0;
 			pulseIBIAvg = 0.0;
 			
+			//fprintf(stderr,"IBI: %d\n", Pulse_IBI); 
+			
 			for(int i=0; i < PULSE_CIRCULAR_BUF_SIZE; i++)
 			{
 				pulseIBIAvg = pulseIBIAvg + (float)pulseIBICircularBuffer[i];
@@ -442,7 +444,7 @@ void fuseSensorData(int *blinkDeltaHistory, char newBlinkData, unsigned int coun
 	const int blinkTHRESHOLD = 500;
 	const int proximityTHRESHOLD = 180; // length of a car is 4.45 meter avg. [15 m - 4.45m = 10.5 m]. 255 (max val) * 0.7 (10.5m of 15m) = 178.5
 	const int pressureTHRESHOLD = 85;   // 85 = 1/3 of max value (255)
-	const int pulseTHRESHOLD = 500;  // typical IBI is ...
+	const int pulseTHRESHOLD = 1000;  // typical IBI is 600 to 700
 	
 	// If there is a high priority event taking place do not execute this function
 	if (BuzzerONFlag == 1)
@@ -470,7 +472,7 @@ void fuseSensorData(int *blinkDeltaHistory, char newBlinkData, unsigned int coun
 		fprintf(stderr,"Prox & Press Event!\n"); 
 	}
 	// blink & low heart rate	
-	/*else if (blinkDeltaHistory[4] < blinkTHRESHOLD && Pulse_IBI > pulseTHRESHOLD && newBlinkData == 1)
+	else if (blinkDeltaHistory[4] < blinkTHRESHOLD && Pulse_IBI > pulseTHRESHOLD && newBlinkData == 1)
 	{
 		eventFlag = 1;
 		fprintf(stderr,"Blink & Heart Event!\n"); 
@@ -487,7 +489,7 @@ void fuseSensorData(int *blinkDeltaHistory, char newBlinkData, unsigned int coun
 		eventFlag = 1;
 		fprintf(stderr,"Press & Heart Event!\n"); 
 	}
-	*/
+	
 	
 	// If one of the conditions was met, ALERT the user
 	if (eventFlag == 1 && fuseSensorWaitFlag == 0)
